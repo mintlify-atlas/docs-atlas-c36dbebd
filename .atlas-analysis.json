@@ -1,0 +1,203 @@
+{
+  "projectType": "general",
+  "projectName": "Bitcoin Core",
+  "projectDescription": "Reference implementation of the Bitcoin protocol providing full node validation, P2P networking, wallet management, and mining capabilities",
+  "theme": "aspen",
+  "primaryColor": "#F7931A",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/blockchain",
+              "concepts/consensus",
+              "concepts/wallets",
+              "concepts/transactions"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/bitcoin-conf",
+              "configuration/command-line-options",
+              "configuration/data-directory"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Node Operations",
+        "groups": [
+          {
+            "group": "Running Bitcoin Core",
+            "pages": [
+              "operations/running-bitcoin-core",
+              "operations/initial-block-download",
+              "operations/pruning",
+              "operations/performance-optimization"
+            ]
+          },
+          {
+            "group": "Building from Source",
+            "pages": [
+              "building/dependencies",
+              "building/unix",
+              "building/macos",
+              "building/windows",
+              "building/bsd"
+            ]
+          },
+          {
+            "group": "Networking",
+            "pages": [
+              "networking/p2p-network",
+              "networking/tor",
+              "networking/i2p",
+              "networking/cjdns",
+              "networking/zmq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Wallet & Transactions",
+        "groups": [
+          {
+            "group": "Wallet Management",
+            "pages": [
+              "wallet/managing-wallets",
+              "wallet/wallet-types",
+              "wallet/backup-recovery",
+              "wallet/migration"
+            ]
+          },
+          {
+            "group": "Transactions",
+            "pages": [
+              "transactions/creating-transactions",
+              "transactions/psbt",
+              "transactions/multisig",
+              "transactions/offline-signing"
+            ]
+          },
+          {
+            "group": "Descriptors",
+            "pages": [
+              "descriptors/overview",
+              "descriptors/syntax",
+              "descriptors/examples"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "development/architecture-overview",
+              "development/validation-engine",
+              "development/mempool",
+              "development/p2p-protocol",
+              "development/consensus-layer"
+            ]
+          },
+          {
+            "group": "Developer Guides",
+            "pages": [
+              "development/developer-notes",
+              "development/coding-style",
+              "development/testing",
+              "development/benchmarking",
+              "development/fuzzing"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/getting-started",
+              "contributing/code-review",
+              "contributing/productivity-tips"
+            ]
+          },
+          {
+            "group": "Advanced Topics",
+            "pages": [
+              "advanced/assumeutxo",
+              "advanced/multiprocess",
+              "advanced/external-signer",
+              "advanced/tracing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "JSON-RPC API",
+            "pages": [
+              "api/json-rpc-overview",
+              "api/blockchain-rpcs",
+              "api/wallet-rpcs",
+              "api/network-rpcs",
+              "api/mining-rpcs",
+              "api/util-rpcs"
+            ]
+          },
+          {
+            "group": "REST API",
+            "pages": [
+              "api/rest-overview",
+              "api/rest-endpoints"
+            ]
+          },
+          {
+            "group": "ZMQ Interface",
+            "pages": [
+              "api/zmq-overview",
+              "api/zmq-notifications"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Full blockchain validation and consensus enforcement",
+    "P2P network protocol implementation with support for Tor, I2P, and CJDNS",
+    "Hierarchical Deterministic (HD) wallet with descriptor support",
+    "Comprehensive JSON-RPC and REST APIs",
+    "Mining and block template generation",
+    "Partially Signed Bitcoin Transactions (PSBT) support",
+    "Transaction mempool management and fee estimation",
+    "ZMQ notifications for real-time event streaming",
+    "Segregated Witness (SegWit) and Taproot support",
+    "Multi-signature and time-locked transactions"
+  ],
+  "publicApiSurface": [
+    "bitcoind - Full node daemon with RPC server",
+    "bitcoin-qt - GUI application",
+    "bitcoin-cli - Command-line RPC client",
+    "bitcoin-tx - Transaction creation/manipulation utility",
+    "bitcoin-wallet - Wallet management utility",
+    "bitcoin-util - General utility commands",
+    "JSON-RPC endpoints: getblockchaininfo, getblock, getrawtransaction, sendrawtransaction, getbalance, sendtoaddress, listunspent, etc.",
+    "REST endpoints: /rest/block, /rest/tx, /rest/chaininfo, /rest/mempool",
+    "ZMQ topics: zmqpubhashtx, zmqpubhashblock, zmqpubrawblock, zmqpubrawtx"
+  ]
+}
