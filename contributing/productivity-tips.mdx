@@ -1,0 +1,264 @@
+---
+title: Productivity Tips for Developers
+description: Tools and techniques to speed up your Bitcoin Core development workflow
+---
+
+This guide provides productivity tips and tools to help you work more efficiently on Bitcoin Core development.
+
+## Compilation Tips
+
+### Cache Compilations with ccache
+
+The easiest way to faster compile times is to cache compiles. `ccache` is a compiler cache that speeds up recompilation by caching the result of previous compilations and detecting when the same compilation is being done again.
+
+Install `ccache` through your distribution's package manager, and run `cmake -B build` with your normal configuration options to pick it up.
+
+<Tip>
+To use ccache for all your C/C++ projects, follow the symlinks method in the [ccache manual](https://ccache.dev/manual/latest.html#_run_modes) to set it up.
+</Tip>
+
+To get the most out of ccache, put something like this in `~/.ccache/ccache.conf`:
+
+```
+max_size = 50.0G  # or whatever cache size you prefer; default is 5G; 0 means unlimited
+base_dir = /home/yourname  # or wherever you keep your source files
+```
+
+**Note:** `base_dir` is required for ccache to share cached compiles of the same file across different repositories/paths. It will only do this for paths under `base_dir`. This option is required for effective use of ccache with git worktrees.
+
+You must not set `base_dir` to "/", or anywhere that contains system headers.
+
+### Disable Features When Generating the Build System
+
+During the generation of the build system only essential build options are enabled by default to save on compilation time.
+
+Run `cmake -B build -LH` to see the full list of available options. GUI tools, such as `ccmake` and `cmake-gui`, can also be helpful.
+
+### Make Use of Your Threads with -j
+
+If you have multiple threads on your machine, you can utilize all of them with:
+
+```bash
+cmake --build build -j "$(($(nproc)+1))"
+```
+
+### Only Build What You Need
+
+When rebuilding during development, note that running `cmake --build build` without giving a target will do a lot of work you probably don't need. It will build the GUI (if you've enabled it) and all the tests (which take much longer to build than the app does).
+
+<Tip>
+When you just want a quick compile to check your work, consider picking one or a set of build targets relevant to what you're working on.
+</Tip>
+
+Examples:
+
+```bash
+cmake --build build --target bitcoind bitcoin-cli
+cmake --build build --target bitcoin-qt
+cmake --build build --target bench_bitcoin
+```
+
+You can and should combine this with `-j` for a parallel build.
+
+### Compile on Multiple Machines
+
+If you have more than one computer at your disposal, you can use [distcc](https://www.distcc.org) to speed up compilation. This is easiest when all computers run the same operating system and compiler version.
+
+## Git Workflows
+
+### Multiple Working Directories with Git Worktrees
+
+If you work with multiple branches or multiple copies of the repository, you should try `git worktrees`.
+
+To create a new branch that lives under a new working directory without disrupting your current working directory (useful for creating pull requests):
+
+```bash
+git worktree add -b my-shiny-new-branch ../living-at-my-new-working-directory based-on-my-crufty-old-commit-ish
+```
+
+To simply check out a commit-ish under a new working directory without disrupting your current working directory (useful for reviewing pull requests):
+
+```bash
+git worktree add --checkout ../where-my-checkout-commit-ish-will-live my-checkout-commit-ish
+```
+
+### Interactive Dummy Rebases with Git Merge-Base
+
+When rebasing, we often want to do a "dummy rebase," whereby we are not rebasing over an updated master but rather over the last common commit with master. This might be useful for rearranging commits, `rebase --autosquash`ing, or `rebase --exec`ing without introducing conflicts that arise from an updated master.
+
+To squash in `git commit --fixup` commits without rebasing over an updated master:
+
+```bash
+git rebase -i --autosquash "$(git merge-base master HEAD)"
+```
+
+To execute `cmake --build build && ctest --test-dir build` on every commit since last diverged from master, but without rebasing over an updated master:
+
+```bash
+git rebase -i --exec "cmake --build build && ctest --test-dir build" "$(git merge-base master HEAD)"
+```
+
+<Tip>
+This synergizes well with ccache as objects resulting from unchanged code will most likely hit the cache and won't need to be recompiled.
+</Tip>
+
+## Writing Code
+
+### Format C/C++ Diffs with clang-format-diff.py
+
+See [contrib/devtools/README.md](https://github.com/bitcoin/bitcoin/blob/master/contrib/devtools/README.md#clang-format-diff.py) for details on formatting C/C++ diffs.
+
+### Format Python Diffs with yapf-diff.py
+
+Usage is exactly the same as `clang-format-diff.py`. You can get it [here](https://github.com/MarcoFalke/yapf-diff).
+
+## Rebasing and Merging Code
+
+### More Conflict Context with merge.conflictstyle diff3
+
+For resolving merge/rebase conflicts, it can be useful to enable diff3 style using `git config merge.conflictstyle diff3`. Instead of:
+
+```diff
+<<<
+yours
+===
+theirs
+>>>
+```
+
+You will see:
+
+```diff
+<<<
+yours
+|||
+original
+===
+theirs
+>>>
+```
+
+This may make it much clearer what caused the conflict. In this style, you can often just look at what changed between *original* and *theirs*, and mechanically apply that to *yours* (or the other way around).
+
+## Reviewing Code
+
+### Reduce Mental Load with Git Diff Options
+
+When reviewing patches which change indentation in C++ files, use `git diff -w` and `git show -w`. This makes the diff algorithm ignore whitespace changes. This feature is also available on github.com by adding `?w=1` at the end of any URL which shows a diff.
+
+When reviewing patches that change symbol names in many places, use `git diff --word-diff`. This will show deleted/added *words* instead of deleted/added *lines*.
+
+When reviewing patches that move code around, try using:
+
+```bash
+git diff --patience commit~:old/file.cpp commit:new/file/name.cpp
+```
+
+And ignore everything except the moved body of code which should show up as neither `+` or `-` lines. In case it was not a pure move, this may even work when combined with the `-w` or `--word-diff` options described above.
+
+<Tip>
+`--color-moved=dimmed-zebra` will also dim the coloring of moved hunks in the diff on compatible terminals.
+</Tip>
+
+### Fetch Commits Directly
+
+Before inspecting any remotely created commit locally, it has to be fetched. This is possible via:
+
+```bash
+git fetch origin <full_commit_hash>
+```
+
+Even commits not part of any branch or tag can be fetched as long as the remote has not garbage collected them.
+
+### Reference PRs Easily with Refspecs
+
+When looking at pull requests by others, it may make sense to add the following section to your `.git/config` file:
+
+```
+[remote "upstream-pull"]
+        fetch = +refs/pull/*/head:refs/remotes/upstream-pull/*
+        url = git@github.com:bitcoin/bitcoin.git
+```
+
+This will add an `upstream-pull` remote to your git repository, which can be fetched using `git fetch --all` or `git fetch upstream-pull`. It will download and store on disk quite a lot of data (all PRs, including merged and closed ones). Afterwards, you can use `upstream-pull/NUMBER/head` in arguments to `git show`, `git checkout` and anywhere a commit id would be acceptable.
+
+### Fetch and Update PRs Individually
+
+The refspec remote is quite resource-heavy, and it is possible to fetch PRs singularly from the remote:
+
+```bash
+# Individual fetch
+git fetch upstream pull/<number>/head
+
+# Fetch with automatic branch creation and switch
+git fetch upstream pull/<number>/head:pr-<number> && git switch pr-<number>
+```
+
+<Tip>
+The remote named "upstream" here must be the one that the pull request was opened against (e.g., github.com/bitcoin/bitcoin.git or for the GUI github.com/bitcoin-core/gui).
+</Tip>
+
+Make these easier to use by adding aliases to your git config:
+
+```
+[alias]
+    # Fetch a single Pull Request and switch to it in a new branch, with `git pr 12345`
+    pr = "!f() { git fetch upstream pull/$1/head:pr-$1 && git switch pr-$1; }; f";
+
+    # Update a Pull Request branch, even after a force push, and even if checked out, with `git pru 12345`
+    pru = "!f() { git fetch --update-head-ok -f upstream pull/$1/head:pr-$1; }; f";
+```
+
+Then a simple `git pr 12345` will fetch and check out that PR from upstream.
+
+### Diff the Diffs with Git Range-Diff
+
+It is very common for contributors to rebase their pull requests, or make changes to commits that are not at the head of their branch. `git range-diff` (Git >= 2.19) can help solve this problem by diffing the diffs.
+
+For example, to identify the differences between your previously reviewed diffs P1-5, and the new diffs P1-2,N3-4:
+
+```bash
+git range-diff master previously-reviewed-head new-head
+```
+
+If you expected `git range-diff` to match a commit, but it shows it as a deletion and an addition, try re-running with a higher creation factor:
+
+```bash
+git range-diff --creation-factor=95 <old_range> <new_range>
+```
+
+<Tip>
+Note that `git range-diff` also works for rebases and accepts normal `git diff` options like `-w` and `--word-diff`.
+</Tip>
+
+Where `P5` is the commit you last reviewed and `4` is the number of commits in the new version:
+
+```bash
+PREV=P5 N=4 && git range-diff `git merge-base --all HEAD $PREV`...$PREV HEAD~$N...HEAD
+```
+
+## Additional Resources
+
+### Debug Logging
+
+If the code is behaving strangely, take a look in the `debug.log` file in the data directory; error and debugging messages are written there.
+
+Debug logging can be enabled on startup with the `-debug` and `-loglevel` configuration options and toggled while bitcoind is running with the `logging` RPC.
+
+### Testing Modes
+
+<Tip>
+If you are testing multi-machine code that needs to operate across the internet, you can run with either the `-signet` or the `-testnet4` config option to test with "play bitcoins" on a test network.
+</Tip>
+
+If you are testing something that can run on one machine, run with the `-regtest` option. In regression test mode, blocks can be created on demand.
+
+### Build for Debugging
+
+When using the default build configuration by running `cmake -B build`, the `-DCMAKE_BUILD_TYPE` is set to `RelWithDebInfo`. This adds debug symbols but also performs some compiler optimizations that may make debugging trickier.
+
+If you need to build exclusively for debugging, set the `-DCMAKE_BUILD_TYPE` to `Debug`:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+```

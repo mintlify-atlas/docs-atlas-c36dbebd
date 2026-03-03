@@ -1,0 +1,235 @@
+---
+title: Descriptor Examples
+description: Real-world examples of Bitcoin Core output descriptors for various use cases
+---
+
+## Single-Key Descriptors
+
+<Accordion title="Pay-to-Pubkey (P2PK)">
+Basic P2PK output with a public key:
+
+```bash
+pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)
+```
+
+With extended public key:
+```bash
+pk(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)
+```
+</Accordion>
+
+<Accordion title="Pay-to-Pubkey-Hash (P2PKH)">
+Standard P2PKH (legacy addresses):
+
+```bash
+pkh(02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)
+```
+
+P2PKH with HD key derivation:
+```bash
+pkh(xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw/1/2)
+```
+
+With key origin and wildcard:
+```bash
+pkh([d34db33f/44'/0'/0']xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/1/*)
+```
+</Accordion>
+
+<Accordion title="Pay-to-Witness-Pubkey-Hash (P2WPKH)">
+Native SegWit (bech32):
+
+```bash
+wpkh(02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9)
+```
+
+Wrapped in P2SH (P2SH-P2WPKH):
+```bash
+sh(wpkh(03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556))
+```
+</Accordion>
+
+<Accordion title="Combo - Multiple Output Types">
+Generate all compatible output types for a single key:
+
+```bash
+combo(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)
+```
+
+This creates: P2PK, P2PKH, P2WPKH, and P2SH-P2WPKH outputs.
+</Accordion>
+
+## Multisig Descriptors
+
+<Accordion title="Bare Multisig">
+1-of-2 multisig:
+
+```bash
+multi(1,022f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4,025cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc)
+```
+</Accordion>
+
+<Accordion title="P2SH Multisig">
+2-of-2 P2SH multisig:
+
+```bash
+sh(multi(2,022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01,03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe))
+```
+
+2-of-2 with sorted keys:
+```bash
+sh(sortedmulti(2,03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe,022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01))
+```
+</Accordion>
+
+<Accordion title="P2WSH Multisig">
+2-of-3 SegWit multisig:
+
+```bash
+wsh(multi(2,03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7,03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb,03d01115d548e7561b15c38f004d734633687cf4419620095bc5b0f47070afe85a))
+```
+
+P2SH-P2WSH 1-of-3 multisig:
+```bash
+sh(wsh(multi(1,03f28773c2d975288bc7d1d205c3748651b075fbc6610e58cddeeddf8f19405aa8,03499fdf9e895e719cfd64e67f07d38e3226aa7b63678949e6e49b241a60e823e4,02d7924d4f7d43ea965a465ae3095ff41131e5946f3c85f79e44adbcf8e27e080e)))
+```
+</Accordion>
+
+<Accordion title="HD Multisig with Wildcards">
+1-of-2 P2WSH multisig with HD derivation:
+
+```bash
+wsh(multi(1,xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB/1/0/*,xpub69H7F5d8KSRgmmdJg2KhpAK8SR3DjMwAdkxj3ZuxV27CprR9LgpeyGmXUbC6wb7ERfvrnKZjXoUmmDznezpbZb7ap6r1D3tgFxHmwMkQTPH/0/0/*))
+```
+
+Sorted 1-of-2 (key order determined lexicographically):
+```bash
+wsh(sortedmulti(1,xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB/1/0/*,xpub69H7F5d8KSRgmmdJg2KhpAK8SR3DjMwAdkxj3ZuxV27CprR9LgpeyGmXUbC6wb7ERfvrnKZjXoUmmDznezpbZb7ap6r1D3tgFxHmwMkQTPH/0/0/*))
+```
+</Accordion>
+
+<Accordion title="Multipath Multisig (Receiving + Change)">
+2-of-3 multisig with receiving (0) and change (1) paths:
+
+```bash
+wsh(sortedmulti(2,[6f53d49c/44h/1h/0h]tpubDDjsCRDQ9YzyaAq9rspCfq8RZFrWoBpYnLxK6sS2hS2yukqSczgcYiur8Scx4Hd5AZatxTuzMtJQJhchufv1FRFanLqUP7JHwusSSpfcEp2/<0;1>/*,[e6807791/44h/1h/0h]tpubDDAfvogaaAxaFJ6c15ht7Tq6ZmiqFYfrSmZsHu7tHXBgnjMZSHAeHSwhvjARNA6Qybon4ksPksjRbPDVp7yXA1KjTjSd5x18KHqbppnXP1s/<0;1>/*,[367c9cfa/44h/1h/0h]tpubDDtPnSgWYk8dDnaDwnof4ehcnjuL5VoUt1eW2MoAed1grPHuXPDnkX1fWMvXfcz3NqFxPbhqNZ3QBdYjLz2hABeM9Z2oqMR1Gt2HHYDoCgh/<0;1>/*))
+```
+</Accordion>
+
+## Taproot Descriptors
+
+<Accordion title="Basic Taproot (Key Path Only)">
+Simple P2TR with internal key:
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)
+```
+</Accordion>
+
+<Accordion title="Taproot with Script Paths">
+P2TR with two script paths:
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,{pk(fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556),pk(e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13)})
+```
+</Accordion>
+
+<Accordion title="Taproot Multisig">
+2-of-2 Taproot multisig with sorted keys:
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,sortedmulti_a(2,2f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4,5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc))
+```
+</Accordion>
+
+<Accordion title="MuSig2 Aggregate Key">
+MuSig2 multisig with key derivation:
+
+```bash
+tr(musig(xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL,xpub68NZiKmJWnxxS6aaHmn81bvJeTESw724CRDs6HbuccFQN9Ku14VQrADWgqbhhTHBaohPX4CjNLf9fq9MYo6oDaPPLPxSb7gwQN3ih19Zm4Y)/0/*)
+```
+</Accordion>
+
+## Miniscript Descriptors
+
+<Accordion title="Decaying Multisig">
+4-of-4 multisig that "decays" to 3-of-4, 2-of-4, and 1-of-4 at future block heights:
+
+```bash
+wsh(thresh(4,pk([7258e4f9/44h/1h/0h]tpubDCZrkQoEU3845aFKUu9VQBYWZtrTwxMzcxnBwKFCYXHD6gEXvtFcxddCCLFsEwmxQaG15izcHxj48SXg1QS5FQGMBx5Ak6deXKPAL7wauBU/<0;1>/*),s:pk([c80b1469/44h/1h/0h]tpubDD3UwwHoNUF4F3Vi5PiUVTc3ji1uThuRfFyBexTSHoAcHuWW2z8qEE2YujegcLtgthr3wMp3ZauvNG9eT9xfJyxXCfNty8h6rDBYU8UU1qq/<0;1>/*),s:pk([4e5024fe/44h/1h/0h]tpubDDLrpPymPLSCJyCMLQdmcWxrAWwsqqssm5NdxT2WSdEBPSXNXxwbeKtsHAyXPpLkhUyKovtZgCi47QxVpw9iVkg95UUgeevyAqtJ9dqBqa1/<0;1>/*),s:pk([3b1d1ee9/44h/1h/0h]tpubDCmDTANBWPzf6d8Ap1J5Ku7J1Ay92MpHMrEV7M5muWxCrTBN1g5f1NPcjMEL6dJHxbvEKNZtYCdowaSTN81DAyLsmv6w6xjJHCQNkxrsrfu/<0;1>/*),sln:after(840000),sln:after(1050000),sln:after(1260000)))
+```
+
+This policy:
+- Starts as 4-of-4 before block 840000
+- Becomes 3-of-4 after block 840000
+- Becomes 2-of-4 after block 1050000
+- Becomes 1-of-4 after block 1260000
+</Accordion>
+
+## Special Cases
+
+<Accordion title="Address Reference">
+Reference an existing address:
+
+```bash
+addr(bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4)
+```
+</Accordion>
+
+<Accordion title="Raw Script">
+Use a raw hex-encoded script:
+
+```bash
+raw(6a)
+```
+
+This example creates an OP_RETURN output.
+</Accordion>
+
+<Accordion title="Complex Nested Scripts">
+Overly complex (but valid) P2SH-P2WSH-P2PKH:
+
+```bash
+sh(wsh(pkh(02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13)))
+```
+
+**Note:** While technically valid, this type of nesting is unnecessarily complex and not recommended for production use.
+</Accordion>
+
+## Practical Wallet Setup
+
+<Accordion title="Modern Single-Sig Wallet">
+SegWit wallet with receiving and change addresses:
+
+```bash
+wpkh([d34db33f/84h/0h/0h]xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz/<0;1>/*)
+```
+
+Derivation path follows BIP84 standard for native SegWit.
+</Accordion>
+
+<Accordion title="2-of-3 Multisig Vault">
+Watch-only multisig for cold storage:
+
+```bash
+wsh(sortedmulti(2,[aabbccdd/48h/0h/0h/2h]xpub6E...,<0;1>/*,[ddeeff00/48h/0h/0h/2h]xpub6F...,<0;1>/*,[11223344/48h/0h/0h/2h]xpub6G...,<0;1>/*))
+```
+
+Follows BIP48 derivation for multisig wallets.
+</Accordion>
+
+## Testing and Validation
+
+Validate and add checksums to descriptors:
+
+```bash
+bitcoin-cli getdescriptorinfo "wpkh(xpub...)"
+```
+
+Derive addresses from a descriptor:
+
+```bash
+bitcoin-cli deriveaddresses "wpkh([d34db33f/84h/0h/0h]xpub.../0/*)#checksum" "[0,10]"
+```
+
+This generates addresses at indices 0-10.

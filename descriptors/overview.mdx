@@ -1,0 +1,100 @@
+---
+title: Output Descriptors Overview
+description: Learn what output descriptors are and why they are essential for Bitcoin Core wallet management
+---
+
+## What are Output Descriptors?
+
+Output descriptors are a simple language for describing collections of output scripts in Bitcoin Core. Introduced in Bitcoin Core v0.17, descriptors provide a standardized way to specify how Bitcoin addresses and scripts are generated.
+
+## Why Use Output Descriptors?
+
+Output descriptors offer several advantages over traditional wallet formats:
+
+### Precise Script Definition
+
+Descriptors eliminate ambiguity by explicitly defining the exact script type and derivation paths. Instead of relying on implicit wallet behavior, you declare exactly what type of addresses you want to use.
+
+### Portable and Standardized
+
+Descriptors can be shared across different wallet implementations and tools. The same descriptor will produce the same addresses regardless of the software used.
+
+### Support for Complex Scripts
+
+Descriptors support a wide range of script types:
+- Single-key scripts (P2PK, P2PKH, P2WPKH)
+- Nested scripts (P2SH-P2WPKH)
+- Multisig configurations
+- Taproot outputs (P2TR)
+- Miniscript expressions for advanced spending conditions
+
+### Hardware Wallet Compatibility
+
+Descriptors include key origin information (master key fingerprint and derivation paths), making them ideal for use with hardware wallets and external signers.
+
+## Supported Script Types
+
+<Accordion title="Single-Key Scripts">
+- **P2PK** - Pay-to-pubkey via `pk()` function
+- **P2PKH** - Pay-to-pubkey-hash via `pkh()` function
+- **P2WPKH** - Pay-to-witness-pubkey-hash via `wpkh()` function
+- **P2SH** - Pay-to-script-hash via `sh()` function
+- **P2WSH** - Pay-to-witness-script-hash via `wsh()` function
+</Accordion>
+
+<Accordion title="Multisig Scripts">
+- **multi()** - k-of-n multisig using OP_CHECKMULTISIG
+- **sortedmulti()** - k-of-n multisig with lexicographically sorted keys
+- **multi_a()** - Taproot-compatible multisig (inside `tr()` only)
+- **sortedmulti_a()** - Sorted Taproot multisig (inside `tr()` only)
+</Accordion>
+
+<Accordion title="Advanced Scripts">
+- **tr()** - Pay-to-taproot outputs with optional script paths
+- **Miniscript** - Policy-based scripts in `wsh()` and `tr()` functions
+- **addr()** - Reference any supported address type
+- **raw()** - Use raw hex-encoded scripts
+</Accordion>
+
+## RPC Support
+
+Bitcoin Core provides extensive RPC support for working with descriptors:
+
+### Query and Analysis
+- `getdescriptorinfo` - Analyze and canonicalize descriptors with checksums
+- `deriveaddresses` - Generate addresses from descriptors
+- `listdescriptors` - List descriptors in a descriptor wallet (v22+)
+
+### Wallet Operations
+- `importdescriptors` - Import descriptors into a wallet (v0.21+)
+- `scantxoutset` - Scan the UTXO set for matching outputs
+- `scanblocks` - Scan blocks for descriptor activity (v25+)
+- `getdescriptoractivity` - Get detailed event data for descriptors (v25+)
+
+### Transaction Building
+- `listunspent` - Outputs specialized descriptors for UTXOs
+- `utxoupdatepsbt` - Add descriptor information to PSBTs (v0.19+)
+- `createmultisig` - Returns descriptors for multisig setups (v0.20+)
+
+## Version History
+
+- **v0.17** - Initial descriptor support
+- **v0.18** - Added `getaddressinfo` descriptor output
+- **v0.19** - PSBT descriptor support, `generatetodescriptor`
+- **v0.20** - Descriptor output for multisig RPCs
+- **v0.21** - `importdescriptors` for descriptor wallets
+- **v22** - `listdescriptors` RPC
+- **v24** - Miniscript support in `wsh()` (watch-only)
+- **v25** - Miniscript signing support, `scanblocks` RPC
+- **v26** - Miniscript in Taproot descriptors
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Descriptor Syntax" icon="code" href="/descriptors/syntax">
+    Learn the complete syntax for writing descriptors
+  </Card>
+  <Card title="Examples" icon="book" href="/descriptors/examples">
+    Explore real-world descriptor examples
+  </Card>
+</CardGroup>

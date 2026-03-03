@@ -1,0 +1,427 @@
+---
+title: USDT Tracing
+description: Monitor Bitcoin Core internals with User-space Statically Defined Tracepoints and eBPF
+---
+
+Bitcoin Core includes User-space, Statically Defined Tracepoints (USDT) that enable detailed monitoring and debugging of internal operations using eBPF (extended Berkeley Packet Filter) programs.
+
+## What is USDT Tracing?
+
+USDT tracing allows you to:
+
+- Hook into specific points in Bitcoin Core's execution
+- Collect custom statistics and metrics
+- Monitor hidden internals during runtime
+- Debug performance issues and behavior
+- Track network messages, block connections, mempool activity, and more
+
+Tracepoints have minimal performance impact when not in use and provide powerful observability when activated.
+
+## How USDT and eBPF Work
+
+```
+eBPF and USDT Overview
+======================
+
+            ┌──────────────────┐            ┌──────────────┐
+            │ tracing script   │            │ bitcoind     │
+            │==================│      2.    │==============│
+            │  eBPF  │ tracing │      hooks │              │
+            │  code  │ logic   │      into┌─┤►tracepoint 1─┼───┐ 3.
+            └────┬───┴──▲──────┘          ├─┤►tracepoint 2 │   │ pass args
+        1.       │      │ 4.              │ │ ...          │   │ to eBPF
+User    compiles │      │ pass data to    │ └──────────────┘   │ program
+Space    & loads │      │ tracing script  │                    │
+─────────────────┼──────┼─────────────────┼────────────────────┼───
+Kernel           │      │                 │                    │
+Space       ┌──┬─▼──────┴─────────────────┴────────────┐       │
+            │  │  eBPF program                         │◄──────┘
+            │  └───────────────────────────────────────┤
+            │ eBPF kernel Virtual Machine (sandboxed)  │
+            └──────────────────────────────────────────┘
+
+1. The tracing script compiles the eBPF code and loads the eBPF program into a kernel VM
+2. The eBPF program hooks into one or more tracepoints
+3. When the tracepoint is called, the arguments are passed to the eBPF program
+4. The eBPF program processes the arguments and returns data to the tracing script
+```
+
+Linux kernel eBPF programs run in a sandboxed environment and can safely collect and process data from Bitcoin Core at runtime.
+
+## When to Use USDT Tracing
+
+Tracing is useful for:
+
+- **Performance Analysis**: Identify bottlenecks in block processing, network I/O, or validation
+- **Network Monitoring**: Track P2P message patterns and peer behavior
+- **Debugging**: Investigate unexpected behavior or bugs
+- **Research**: Study Bitcoin Core internals and behavior patterns
+- **Production Monitoring**: Collect custom metrics without modifying code
+- **Security Analysis**: Monitor for unusual patterns or attacks
+
+<Note>
+USDT tracing is a Linux-specific feature. It requires a Linux system with eBPF support (kernel 4.1+, recommended 5.2+).
+</Note>
+
+## Tools for USDT Tracing
+
+Two main eBPF front-ends support USDT:
+
+### bpftrace
+
+Best for one-liners and short scripts:
+
+```bash
+# Count inbound messages by type
+sudo bpftrace -e 'usdt:/path/to/bitcoind:net:inbound_message { @[str(arg3)] = count(); }'
+```
+
+### BPF Compiler Collection (BCC)
+
+Best for complex tools and daemons. Uses Python for scripting with C for eBPF programs.
+
+Examples for both tools are available in the `contrib/tracing/` directory of Bitcoin Core.
+
+## Available Tracepoints
+
+Bitcoin Core includes tracepoints across several contexts:
+
+### Network Tracepoints (`net` context)
+
+#### `net:inbound_message`
+
+Called when a message is received from a peer.
+
+**Arguments:**
+1. Peer ID (`int64`)
+2. Peer address and port (`string`, up to 68 chars)
+3. Connection type (`string`, max 20 chars: "inbound", "outbound-full-relay", etc.)
+4. Message type (`string`, max 20 chars: "inv", "ping", "getdata", etc.)
+5. Message size in bytes (`uint64`)
+6. Message bytes (`pointer to bytes`)
+
+#### `net:outbound_message`
+
+Called when a message is sent to a peer. Same arguments as `inbound_message`.
+
+#### `net:inbound_connection`
+
+Called when a new inbound connection is opened.
+
+**Arguments:**
+1. Peer ID (`int64`)
+2. Peer address and port (`string`)
+3. Connection type (`string`)
+4. Network type (`uint32`: 1=IPv4, 2=IPv6, 3=Onion, 4=I2P, 5=CJDNS)
+5. Total inbound connections (`uint64`)
+
+#### `net:outbound_connection`
+
+Called when a new outbound connection is opened. Similar arguments to `inbound_connection`.
+
+#### `net:evicted_inbound_connection`
+
+Called when an inbound connection is evicted.
+
+#### `net:misbehaving_connection`
+
+Called when a connection is misbehaving.
+
+**Arguments:**
+1. Peer ID (`int64`)
+2. Reason (`string`, max 128 chars)
+
+#### `net:closed_connection`
+
+Called when a connection is closed.
+
+### Validation Tracepoints (`validation` context)
+
+#### `validation:block_connected`
+
+Called after a block is connected to the chain.
+
+**Arguments:**
+1. Block header hash (`32 bytes`, little-endian)
+2. Block height (`int32`)
+3. Transactions in block (`uint64`)
+4. Inputs spent (`int32`)
+5. SigOps in block (`uint64`)
+6. Connection time in nanoseconds (`uint64`)
+
+### UTXO Cache Tracepoints (`utxocache` context)
+
+#### `utxocache:flush`
+
+Called after UTXO cache is flushed.
+
+**Arguments:**
+1. Flush duration in microseconds (`int64`)
+2. Flush mode (`uint32`: 0=NONE, 1=IF_NEEDED, 2=PERIODIC, 3=FORCE_FLUSH, 4=FORCE_SYNC)
+3. Cache size before flush (`uint64`)
+4. Cache memory usage in bytes (`uint64`)
+5. Pruning caused flush (`bool`)
+
+#### `utxocache:add`
+
+Called when a coin is added to UTXO cache.
+
+**Arguments:**
+1. Transaction ID (`32 bytes`)
+2. Output index (`uint32`)
+3. Block height (`uint32`)
+4. Coin value (`int64`)
+5. Is coinbase (`bool`)
+
+#### `utxocache:spent`
+
+Called when a coin is spent. Similar arguments to `add`.
+
+#### `utxocache:uncache`
+
+Called when a coin is unloaded from cache (e.g., invalid transaction).
+
+### Mempool Tracepoints (`mempool` context)
+
+#### `mempool:added`
+
+Called when a transaction is added to mempool.
+
+**Arguments:**
+1. Transaction ID (`32 bytes`)
+2. Virtual size (`int32`)
+3. Fee (`int64`)
+
+#### `mempool:removed`
+
+Called when a transaction is removed from mempool.
+
+**Arguments:**
+1. Transaction ID (`32 bytes`)
+2. Removal reason (`string`, max 9 chars)
+3. Virtual size (`int32`)
+4. Fee (`int64`)
+5. Entry time epoch (`uint64`)
+
+#### `mempool:replaced`
+
+Called when a transaction is replaced (RBF).
+
+#### `mempool:rejected`
+
+Called when a transaction is rejected.
+
+**Arguments:**
+1. Transaction ID (`32 bytes`)
+2. Reject reason (`string`, max 118 chars)
+
+### Coin Selection Tracepoints (`coin_selection` context)
+
+#### `coin_selection:selected_coins`
+
+Called when coin selection completes.
+
+**Arguments:**
+1. Wallet name (`string`)
+2. Algorithm name (`string`)
+3. Target value (`int64`)
+4. Waste metric (`int64`)
+5. Total selected value (`int64`)
+
+## Listing Available Tracepoints
+
+Several methods to list tracepoints in your Bitcoin Core binary:
+
+### Using GDB
+
+```bash
+gdb ./build/bin/bitcoind
+(gdb) info probes
+```
+
+Output:
+```
+Type Provider   Name             Where              Semaphore Object
+stap net        inbound_message  0x000000000014419e 0x0000000000d29bd2 /build/bin/bitcoind
+stap net        outbound_message 0x0000000000107c05 0x0000000000d29bd0 /build/bin/bitcoind
+...
+```
+
+### Using readelf
+
+```bash
+readelf -n ./build/bin/bitcoind | grep NT_STAPSDT -A 4 -B 2
+```
+
+### Using tplist (from BCC)
+
+```bash
+# On Ubuntu
+sudo tplist-bpfcc -l ./build/bin/bitcoind -v
+
+# Generic
+sudo tplist -l ./build/bin/bitcoind -v
+```
+
+Output:
+```
+b'net':b'outbound_message' [sema 0xd29bd0]
+  1 location(s)
+  6 argument(s)
+...
+```
+
+## Example: Monitor Inbound Messages
+
+### Using bpftrace
+
+```bash
+# Count messages by type
+sudo bpftrace -e '
+  usdt:/path/to/bitcoind:net:inbound_message {
+    @msg_count[str(arg3)] = count();
+  }
+'
+```
+
+### Using BCC (Python)
+
+```python
+#!/usr/bin/env python3
+from bcc import BPF, USDT
+
+# Attach to bitcoind process
+u = USDT(path="/path/to/bitcoind")
+u.enable_probe(probe="inbound_message", fn_name="trace_message")
+
+# eBPF program
+bpf_text = """
+#include <uapi/linux/ptrace.h>
+
+int trace_message(struct pt_regs *ctx) {
+    uint64_t peer_id;
+    char msg_type[20];
+    
+    bpf_usdt_readarg(1, ctx, &peer_id);
+    bpf_usdt_readarg_p(4, ctx, &msg_type, sizeof(msg_type));
+    
+    bpf_trace_printk("Peer %d received %s\\n", peer_id, msg_type);
+    return 0;
+}
+"""
+
+b = BPF(text=bpf_text, usdt_contexts=[u])
+print("Tracing inbound messages... Ctrl-C to stop")
+b.trace_print()
+```
+
+## Example: Benchmark Block Connections
+
+```bash
+# Measure block connection times
+sudo bpftrace -e '
+  usdt:/path/to/bitcoind:validation:block_connected {
+    @block_time_ns[arg1] = arg5;
+    @avg_time_ms = avg(arg5) / 1000000;
+    printf("Block %d connected in %.2f ms\\n", arg1, arg5/1000000.0);
+  }
+' 
+```
+
+Run with `-reindex` to benchmark historical block processing.
+
+## Example: Monitor Mempool Activity
+
+```bash
+# Track mempool additions and removals
+sudo bpftrace -e '
+  usdt:/path/to/bitcoind:mempool:added {
+    @added = count();
+    @total_fees += arg2;
+  }
+  
+  usdt:/path/to/bitcoind:mempool:removed {
+    @removed[str(arg1)] = count();
+  }
+  
+  interval:s:10 {
+    print(@added);
+    print(@removed);
+    print(@total_fees);
+  }
+'
+```
+
+## Important Limitations
+
+### eBPF Stack Size
+
+The eBPF VM has a limited stack size of 512 bytes. Large data structures may not fit.
+
+### bpftrace Argument Limit
+
+On x86_64, bpftrace can only access the first 6 arguments (`arg0` through `arg5`). If a tracepoint has more arguments, BCC can access all 12.
+
+### Message Size Limits
+
+Network message tracepoints pass full messages, but the eBPF VM may truncate messages larger than 32 KB.
+
+## Adding Custom Tracepoints
+
+Developers can add new tracepoints to Bitcoin Core:
+
+```cpp
+// In src/net.cpp
+#include <util/trace.h>
+
+TRACEPOINT_SEMAPHORE(net, outbound_message);
+
+void CConnman::PushMessage(...) {
+    // ... code ...
+    
+    TRACEPOINT(net, outbound_message,
+        pnode->GetId(),
+        pnode->m_addr_name.c_str(),
+        pnode->ConnectionTypeAsString().c_str(),
+        msg_type.c_str(),
+        msg.data.size(),
+        msg.data.data()
+    );
+}
+```
+
+### Best Practices for Custom Tracepoints
+
+1. **Clear Use Case**: Define specific monitoring or debugging need
+2. **Provide Examples**: Include example scripts in `contrib/tracing/`
+3. **Semi-Stable API**: Keep argument order stable for scripting
+4. **Document Thoroughly**: Add to tracepoint documentation
+5. **Consider Limits**: Respect eBPF VM stack size (512 bytes)
+6. **String Arguments**: Pass as C-style strings with documented max length
+7. **Expensive Arguments**: Gate with `TRACEPOINT_ACTIVE()` check
+
+```cpp
+if (TRACEPOINT_ACTIVE(context, event)) {
+    expensive_data = CalculateExpensiveData();
+    TRACEPOINT(context, event, expensive_data);
+}
+```
+
+## Resources
+
+- [Bitcoin Core tracing examples](https://github.com/bitcoin/bitcoin/tree/master/contrib/tracing)
+- [bpftrace documentation](https://github.com/bpftrace/bpftrace)
+- [BCC documentation](https://github.com/iovisor/bcc)
+- [eBPF introduction](https://ebpf.io/)
+
+## Security Considerations
+
+- Tracing requires root privileges (sudo)
+- eBPF programs run in kernel space
+- Only load trusted tracing scripts
+- Be cautious with production systems
+- Test scripts thoroughly before production use
+
+<Warning>
+eBPF tracing runs with kernel privileges. Only use trusted scripts and be careful when running on production systems.
+</Warning>

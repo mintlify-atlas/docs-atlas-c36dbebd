@@ -1,0 +1,265 @@
+---
+title: "Consensus Rules and Validation"
+description: "Core consensus rules that govern Bitcoin's validity and the mechanisms for enforcing them"
+---
+
+## Overview
+
+Consensus rules are the fundamental protocol rules that all Bitcoin nodes must enforce to maintain agreement on the blockchain's valid state. These rules define what constitutes a valid transaction and block, ensuring all honest nodes converge on the same blockchain history.
+
+## Block-Level Consensus Rules
+
+### Size and Weight Limits
+
+Bitcoin enforces strict limits on block size and computational cost:
+
+<CodeGroup>
+```cpp Block Limits
+MAX_BLOCK_SERIALIZED_SIZE = 4,000,000 bytes  // Buffer size limit
+MAX_BLOCK_WEIGHT          = 4,000,000 weight units  // BIP 141
+MAX_BLOCK_SIGOPS_COST     = 80,000    // Maximum signature operations
+```
+</CodeGroup>
+
+### Weight Calculation
+
+Segregated Witness (BIP 141) introduced block weight:
+
+```cpp
+weight = (base_size × 3) + total_size
+```
+
+Where:
+- **base_size**: Size without witness data
+- **total_size**: Size including witness data
+- **WITNESS_SCALE_FACTOR**: 4 (constant)
+
+This formula gives witness data a 75% discount, incentivizing its use.
+
+### Proof-of-Work Requirements
+
+Every block must satisfy proof-of-work:
+
+1. Double SHA256 hash of the block header must be below the target
+2. Target is encoded in the `nBits` field (compact representation)
+3. Difficulty adjusts every **2016 blocks** (approximately 2 weeks)
+4. Target range is constrained by `powLimit` (network-specific)
+
+<Note>
+The difficulty adjustment ensures blocks are found approximately every 10 minutes on average, regardless of total network hash rate.
+</Note>
+
+## Transaction-Level Consensus Rules
+
+### Basic Transaction Validity
+
+Every transaction must satisfy:
+
+1. **Non-empty inputs and outputs**: At least one input and one output
+2. **Size limits**: Minimum 60 bytes (MIN_TRANSACTION_WEIGHT / 4)
+3. **Value limits**: Output values must be in range [0, 21M BTC]
+4. **No duplicate inputs**: Each input must reference a unique outpoint
+
+### Input Validation
+
+For each transaction input:
+
+- Must reference an existing unspent output (UTXO)
+- The referenced output must not have been spent in the same chain
+- For non-coinbase transactions, all inputs must exist
+
+### Output Validation
+
+For each transaction output:
+
+- Value must be non-negative
+- Total outputs cannot exceed total inputs (except coinbase)
+- scriptPubKey must be well-formed
+
+### Coinbase Transactions
+
+The first transaction in each block is special:
+
+```cpp
+// Coinbase maturity
+COINBASE_MATURITY = 100 blocks
+```
+
+- Must have exactly one input with null outpoint (hash=0, n=0xFFFFFFFF)
+- Input scriptSig must be 2-100 bytes
+- Output value = block subsidy + transaction fees
+- Coinbase outputs cannot be spent for 100 blocks (maturity requirement)
+
+## Script Validation
+
+### Script Execution
+
+Bitcoin uses a stack-based scripting language:
+
+1. scriptSig (from input) is executed
+2. scriptPubKey (from referenced output) is executed
+3. Transaction is valid if stack top is true (non-zero)
+
+### Standard Script Types
+
+Bitcoin Core recognizes several standard script templates:
+
+- **P2PKH** (Pay-to-PubKey-Hash): Traditional addresses
+- **P2SH** (Pay-to-Script-Hash): BIP 16, hash of arbitrary script
+- **P2WPKH** (Pay-to-Witness-PubKey-Hash): Native SegWit
+- **P2WSH** (Pay-to-Witness-Script-Hash): SegWit script hash
+- **P2TR** (Pay-to-Taproot): BIP 341, Schnorr signatures and MAST
+
+### Signature Verification
+
+Signatures must satisfy:
+
+- Valid ECDSA or Schnorr signature (for Taproot)
+- Correct sighash type and commitment
+- Public key recovers the correct address
+- No signature malleability (BIP 66, BIP 146)
+
+<Warning>
+All signature verification is skipped for blocks before the `assumevalid` checkpoint to speed up initial sync, but all other consensus rules are still enforced.
+</Warning>
+
+## Timelock Mechanisms
+
+### Transaction-Level Timelocks (nLockTime)
+
+- **Block height**: Values < 500,000,000 interpreted as block height
+- **Unix timestamp**: Values ≥ 500,000,000 interpreted as timestamp
+- Transaction cannot be mined until locktime condition is met
+- Disabled if all inputs have sequence = 0xFFFFFFFF
+
+### Input-Level Timelocks (nSequence)
+
+BIP 68 defines relative lock-time using nSequence:
+
+```cpp
+SEQUENCE_LOCKTIME_DISABLE_FLAG = (1 << 31)  // Disable timelock
+SEQUENCE_LOCKTIME_TYPE_FLAG    = (1 << 22)  // Time vs blocks
+SEQUENCE_LOCKTIME_MASK         = 0x0000FFFF // Extract value
+```
+
+- If type flag is set: relative time (512-second intervals)
+- If type flag is clear: relative blocks
+- Only active for transaction version ≥ 2
+
+### OP_CHECKLOCKTIMEVERIFY and OP_CHECKSEQUENCEVERIFY
+
+Script opcodes for timelock enforcement (BIP 65, BIP 112):
+
+- Fail the script if locktime conditions aren't met
+- Enable more complex time-based spending conditions
+- Used extensively in Lightning Network and other Layer 2 protocols
+
+## Witness Commitment
+
+SegWit blocks include a witness commitment:
+
+- Located in the coinbase transaction's output
+- Commits to a merkle tree of all witness data (wtxids)
+- Identified by scriptPubKey pattern: `OP_RETURN 0x24 0xaa21a9ed <32-byte-hash>`
+- Minimum commitment size: 38 bytes (MINIMUM_WITNESS_COMMITMENT)
+
+<Info>
+The witness commitment ensures that witness data is committed to the blockchain while keeping it separate from the transaction merkle tree.
+</Info>
+
+## Soft Forks and Deployment
+
+Bitcoin Core uses BIP 9 for deploying soft forks:
+
+### BIP 9 Parameters
+
+```cpp
+struct BIP9Deployment {
+    int bit;                    // Version bit (0-28)
+    int64_t nStartTime;        // Start signaling
+    int64_t nTimeout;          // Stop signaling
+    int min_activation_height; // Earliest activation
+    uint32_t period;           // Signal period (2016 blocks)
+    uint32_t threshold;        // Required signaling (1916 = 95%)
+};
+```
+
+### Buried Deployments
+
+Older soft forks are "buried" with hardcoded activation heights:
+
+- **BIP 34**: Block height in coinbase (DEPLOYMENT_HEIGHTINCB)
+- **BIP 65**: OP_CHECKLOCKTIMEVERIFY (DEPLOYMENT_CLTV)
+- **BIP 66**: Strict DER signatures (DEPLOYMENT_DERSIG)
+- **BIP 68/112/113**: Relative timelocks (DEPLOYMENT_CSV)
+- **BIP 141/143/147**: Segregated Witness (DEPLOYMENT_SEGWIT)
+
+### Active Deployments
+
+Currently active BIP 9 deployments:
+
+- **DEPLOYMENT_TAPROOT**: Schnorr/Taproot (BIPs 340-342)
+- **DEPLOYMENT_TESTDUMMY**: Testing mechanism
+
+## Validation Results
+
+Bitcoin Core categorizes validation failures:
+
+### Transaction Validation Results
+
+```cpp
+enum class TxValidationResult {
+    TX_CONSENSUS,           // Invalid by consensus rules
+    TX_INPUTS_NOT_STANDARD, // Inputs fail policy rules
+    TX_NOT_STANDARD,        // Transaction fails policy
+    TX_MISSING_INPUTS,      // Referenced outputs don't exist
+    TX_PREMATURE_SPEND,     // Coinbase maturity or timelock
+    TX_WITNESS_MUTATED,     // Witness malleation detected
+    TX_CONFLICT,            // Already in chain or mempool
+    TX_MEMPOOL_POLICY,      // Mempool limits exceeded
+};
+```
+
+### Block Validation Results
+
+```cpp
+enum class BlockValidationResult {
+    BLOCK_CONSENSUS,        // Violates consensus rules
+    BLOCK_CACHED_INVALID,   // Previously rejected
+    BLOCK_INVALID_HEADER,   // Invalid PoW or timestamp
+    BLOCK_MUTATED,          // Data doesn't match PoW commitment
+    BLOCK_MISSING_PREV,     // Parent unknown
+    BLOCK_INVALID_PREV,     // Built on invalid block
+    BLOCK_TIME_FUTURE,      // Timestamp > 2 hours ahead
+};
+```
+
+## Consensus Parameters
+
+Network-specific consensus parameters in `Consensus::Params`:
+
+- **hashGenesisBlock**: Genesis block identifier
+- **nSubsidyHalvingInterval**: Blocks between halvings (210,000)
+- **powLimit**: Maximum target (minimum difficulty)
+- **nPowTargetSpacing**: Target block interval (600 seconds)
+- **nPowTargetTimespan**: Difficulty adjustment period (1209600 seconds)
+- **nMinimumChainWork**: Minimum work for valid chain
+
+<Tip>
+Different networks (mainnet, testnet, signet, regtest) have different consensus parameters, allowing for easier testing and development.
+</Tip>
+
+## BIP 94: Timewarp Mitigation
+
+Recent addition to prevent timestamp manipulation:
+
+```cpp
+MAX_TIMEWARP = 600 seconds  // Maximum backward drift
+```
+
+Limits how much earlier the first block of a difficulty period can be compared to the last block of the previous period.
+
+## Related Concepts
+
+- [Blockchain Storage](/concepts/blockchain) - How validated blocks are stored
+- [Transactions](/concepts/transactions) - Transaction structure and validation details

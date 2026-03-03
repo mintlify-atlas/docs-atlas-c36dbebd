@@ -1,0 +1,224 @@
+---
+title: Code Review Process
+description: Best practices for reviewing and submitting code to Bitcoin Core
+---
+
+Code review is a burdensome but important part of the development process. This guide covers the peer review process and best practices for both reviewers and contributors.
+
+## Committing Patches
+
+### Atomic Commits
+
+In general, [commits should be atomic](https://en.wikipedia.org/wiki/Atomic_commit#Atomic_commit_convention) and diffs should be easy to read. For this reason, do not mix any formatting fixes or code moves with actual code changes.
+
+Make sure each individual commit is hygienic: that it builds successfully on its own without warnings, errors, regressions, or test failures. This means tests must be updated in the same commit that changes the behavior.
+
+### Commit Messages
+
+Commit messages should be verbose by default consisting of:
+- **Short subject line** (50 chars max)
+- **Blank line**
+- **Detailed explanatory text** as separate paragraph(s)
+
+The title alone can be sufficient for simple changes (like "Correct typo in init.cpp").
+
+Commit messages should be helpful to people reading your code in the future, so explain the reasoning for your decisions. [Further explanation](https://cbea.ms/git-commit/).
+
+### References and Mentions
+
+If a particular commit references another issue, add the reference:
+- `refs #1234` - references an issue
+- `fixes #4321` or `closes #4321` - will close the issue when merged
+
+Commit messages should **never** contain any `@` mentions (usernames prefixed with "@").
+
+## Creating the Pull Request
+
+### PR Title Format
+
+The title of the pull request should be prefixed by the component or area that the pull request affects:
+
+- `consensus` - changes to consensus critical code
+- `doc` - changes to the documentation
+- `qt` or `gui` - changes to bitcoin-qt
+- `log` - changes to log messages
+- `mining` - changes to the mining code
+- `net` or `p2p` - changes to the peer-to-peer network code
+- `refactor` - structural changes that do not change behavior
+- `rpc`, `rest` or `zmq` - changes to the RPC, REST or ZMQ APIs
+- `contrib` or `cli` - changes to the scripts and tools
+- `test`, `qa` or `ci` - changes to the unit tests, QA tests or CI code
+- `util` or `lib` - changes to the utils or libraries
+- `wallet` - changes to the wallet code
+- `build` - changes to CMake
+- `guix` - changes to the GUIX reproducible builds
+
+**Examples:**
+```
+consensus: Add new opcode for BIP-XXXX OP_CHECKAWESOMESIG
+net: Automatically create onion service, listen on Tor
+qt: Add feed bump button
+log: Fix typo in log message
+```
+
+### PR Description
+
+The body of the pull request should contain sufficient description of:
+- **What** the patch does
+- **Why** it does it, with justification and reasoning
+- References to any discussions (other issues or mailing list discussions)
+
+The description for a new pull request should not contain any `@` mentions. The PR description will be included in the commit message when the PR is merged. Instead, make any username mentions in a subsequent comment to the PR.
+
+### Work in Progress
+
+If a pull request is not to be considered for merging (yet):
+- Prefix the title with `[WIP]`, or
+- Use [Task Lists](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#task-lists) in the body to indicate pending tasks
+
+## Addressing Feedback
+
+At this stage, one should expect comments and review from other contributors. You can add more commits to your pull request by committing them locally and pushing to your fork.
+
+You are expected to reply to any review comments before your pull request is merged. You may update the code or reject the feedback if you do not agree with it, but you should express so in a reply. If there is outstanding feedback and you are not actively working on it, your pull request may be closed.
+
+## Squashing Commits
+
+If your pull request contains fixup commits (commits that change the same line of code repeatedly) or too fine-grained commits, you may be asked to [squash](https://git-scm.com/docs/git-rebase#_interactive_mode) your commits.
+
+```bash
+git checkout your_branch_name
+git rebase -i HEAD~n
+# n is normally the number of commits in the pull request.
+# Set commits (except the one in the first line) from 'pick' to 'squash', save and quit.
+# On the next screen, edit/refine commit messages.
+# Save and quit.
+git push -f # (force push to GitHub)
+```
+
+Please update the resulting commit message, if needed. It should read as a coherent message. In most cases, this means not just listing the interim commits.
+
+<Tip>
+Please refrain from creating several pull requests for the same change. Use the pull request that is already open (or was created earlier) to amend changes. This preserves the discussion and review that happened earlier for the respective change set.
+</Tip>
+
+## Rebasing Changes
+
+When a pull request conflicts with the target branch, you may be asked to rebase it on top of the current target branch:
+
+```bash
+git fetch https://github.com/bitcoin/bitcoin  # Fetch the latest upstream commit
+git rebase FETCH_HEAD  # Rebuild commits on top of the new base
+```
+
+After a rebase, reviewers are encouraged to sign off on the force push. This should be relatively straightforward with the `git range-diff` tool. To avoid needless review churn, maintainers will generally merge pull requests that received the most review attention first.
+
+## Pull Request Philosophy
+
+Patchsets should always be focused. For example, a pull request could add a feature, fix a bug, or refactor code; but not a mixture. Please also avoid super pull requests which attempt to do too much, are overly large, or overly complex as this makes review difficult.
+
+### Features
+
+When adding a new feature, thought must be given to the long term technical debt and maintenance that feature may require after inclusion. Before proposing a new feature that will require maintenance, please consider if you are willing to maintain it (including bug fixing). If features get orphaned with no maintainer in the future, they may be removed by the Repository Maintainer.
+
+### Refactoring
+
+Refactoring is a necessary part of any software project's evolution. There are three categories of refactoring:
+
+1. **Code-only moves**
+2. **Code style fixes**
+3. **Code refactoring**
+
+In general, refactoring pull requests should not mix these three kinds of activities in order to make refactoring pull requests easy to review and uncontroversial. In all cases, refactoring PRs must not change the behaviour of code within the pull request (bugs must be preserved as is).
+
+Project maintainers aim for a quick turnaround on refactoring pull requests, so where possible keep them short, uncomplex and easy to verify.
+
+<Tip>
+Pull requests that refactor the code should not be made by new contributors. It requires a certain level of experience to know where the code belongs to and to understand the full ramification (including rebase effort of open pull requests).
+</Tip>
+
+Trivial pull requests or pull requests that refactor the code with no clear benefits may be immediately closed by the maintainers to reduce unnecessary workload on reviewing.
+
+## Peer Review
+
+Anyone may participate in peer review which is expressed by comments in the pull request. Typically reviewers will review the code for obvious errors, as well as test out the patch set and opine on the technical merits of the patch.
+
+### Review Standards
+
+In general, if the **improvements** do not warrant the **review effort** required, the PR has a high chance of being rejected. It is up to the PR author to convince the reviewers that the changes warrant the review effort.
+
+If there is reasonable doubt that the pull request author does not fully understand the changes they are submitting themselves, or if it becomes clear that they have not tested the changes on a basic level themselves, the pull request may be closed immediately.
+
+### Conceptual Review
+
+A review can be a conceptual review, where the reviewer leaves a comment:
+- `Concept (N)ACK` - "I do (not) agree with the general goal of this pull request"
+- `Approach (N)ACK` - `Concept ACK`, but "I do (not) agree with the approach of this change"
+
+A `NACK` needs to include a rationale why the change is not worthwhile. NACKs without accompanying reasoning may be disregarded.
+
+### Code Review
+
+After conceptual agreement on the change, code review can be provided. A review begins with `ACK BRANCH_COMMIT`, where `BRANCH_COMMIT` is the top of the PR branch, followed by a description of how the reviewer did the review.
+
+The following language is used within pull request comments:
+- "I have tested the code" - involving change-specific manual testing in addition to running the unit, functional, or fuzz tests
+- "I have not tested the code, but I have reviewed it and it looks OK, I agree it can be merged"
+- A "nit" refers to a trivial, often non-blocking issue
+
+### Reviewer Weight
+
+Project maintainers reserve the right to weigh the opinions of peer reviewers using common sense judgement and may also weigh based on merit. Reviewers that have demonstrated a deeper commitment and understanding of the project over time or who have clear domain expertise may naturally have more weight.
+
+### Consensus-Critical Code
+
+Where a patch set affects consensus-critical code, the bar will be much higher in terms of discussion and peer review requirements, keeping in mind that mistakes could be very costly to the wider community. This includes refactoring of consensus-critical code.
+
+## Finding Reviewers
+
+As most reviewers are themselves developers with their own projects, the review process can be quite lengthy, and some amount of patience is required. If you've been waiting for several months, there may be reasons:
+
+### Feature Freeze
+It may be because of a feature freeze due to an upcoming release. During this time, only bug fixes are taken into consideration. If your pull request is a new feature, it will not be prioritized until after the release.
+
+### Lack of Appeal
+The changes you are suggesting may not appeal to people. Rather than nits and critique, thundering silence is a good sign of widespread (mild) dislike. Take another critical look at what you are suggesting:
+- Does it change too much?
+- Is it too broad?
+- Does it adhere to the [developer notes](https://github.com/bitcoin/bitcoin/blob/master/doc/developer-notes.md)?
+- Is it dangerous or insecure?
+- Is it messily written?
+
+Identify and address any issues you find, then ask on IRC if someone could give their opinion on the concept itself.
+
+### Complex Code
+Your code may be too complex for all but a few people. Use the [Git Blame feature](https://docs.github.com/en/repositories/working-with-files/using-files/viewing-and-understanding-files) to find who last modified the code you are changing and give them a nudge (but don't be incessant).
+
+### Ask for Help
+If all else fails, ask on IRC or elsewhere for someone to give your pull request a look. If you think you've been waiting for an unreasonably long time (say, more than a month) for no particular reason (a few lines changed, etc.), this is totally fine.
+
+<Tip>
+Remember that the best thing you can do while waiting is give review to others!
+</Tip>
+
+## Decision Making Process
+
+Whether a pull request is merged into Bitcoin Core rests with the project merge maintainers. Maintainers will take into consideration if a patch:
+- Is in line with the general principles of the project
+- Meets the minimum standards for inclusion
+- Has general consensus of contributors
+
+### Minimum Standards
+
+In general, all pull requests must:
+- Have a clear use case, fix a demonstrable bug or serve the greater good of the project
+- Be well peer-reviewed
+- Have unit tests, functional tests, and fuzz tests, where appropriate
+- Follow code style guidelines
+- Not break the existing test suite
+- Include unit tests demonstrating the bug and proving the fix (where bugs are fixed)
+- Change relevant comments and documentation when behaviour of code changes
+
+### Consensus Changes
+
+Patches that change Bitcoin consensus rules are considerably more involved than normal because they affect the entire ecosystem and so must be preceded by extensive mailing list discussions and have a numbered BIP. While each case will be different, one should be prepared to expend more time and effort than for other kinds of patches because of increased peer review and consensus building requirements.

@@ -1,0 +1,456 @@
+---
+title: Performance Optimization
+description: Tips and techniques for optimizing Bitcoin Core performance and resource usage
+---
+
+Optimize your Bitcoin Core node for better performance, lower resource usage, and reduced bandwidth consumption.
+
+## Memory Optimization
+
+Bitcoin Core's memory usage can be tuned to match your system's capabilities.
+
+### Database Cache
+
+The UTXO database cache is the most important memory setting:
+
+```bash
+# Default: 450 MiB
+bitcoind -dbcache=450
+
+# Recommended for 8 GB RAM system
+bitcoind -dbcache=4096
+
+# Minimum: 4 MiB
+bitcoind -dbcache=4
+```
+
+<Tip>
+**During IBD**: Set `-dbcache` to 50% of your available RAM for maximum speed.
+
+**After IBD**: You can reduce it to save memory. Default (450 MiB) is adequate for normal operation.
+</Tip>
+
+In `bitcoin.conf`:
+
+```ini
+# Allocate 4 GB to database cache
+dbcache=4096
+```
+
+<Info>
+The dbcache setting is in MiB (1024-based). The minimum value is 4 MiB, default is 450 MiB.
+</Info>
+
+### Mempool Configuration
+
+The mempool stores unconfirmed transactions:
+
+```bash
+# Default: 300 MB
+bitcoind -maxmempool=300
+
+# Reduce for low-memory systems
+bitcoind -maxmempool=50
+
+# Minimum: 5 MB
+bitcoind -maxmempool=5
+```
+
+<Note>
+Unused mempool memory is shared with the UTXO cache, so reducing `-maxmempool` helps limit overall memory usage.
+</Note>
+
+### Blocks-Only Mode
+
+Disable transaction relay to minimize memory usage:
+
+```bash
+bitcoind -blocksonly
+```
+
+This mode:
+- Reduces default mempool to 5 MB
+- Opts out of receiving and relaying transactions (except from whitelisted peers)
+- Significantly reduces bandwidth and memory usage
+
+<Warning>
+**Privacy Warning**: Do not use `-blocksonly` when broadcasting your own transactions. They will stand out and affect privacy.
+
+When using with a wallet, also set:
+```bash
+-walletbroadcast=0
+-spendzeroconfchange=0
+```
+Use an alternative method to broadcast transactions.
+</Warning>
+
+### Connection Limits
+
+Reduce the number of peer connections:
+
+```bash
+# Default: 125 connections
+bitcoind -maxconnections=125
+
+# Reduce for low-resource systems
+bitcoind -maxconnections=20
+```
+
+<Info>
+Each connection consumes memory. With `-maxconnections=0` or when inbound connections are disabled, only 11 outbound connections are maintained:
+- 8 full-relay connections
+- 2 block-relay-only connections  
+- Occasionally 1 short-lived feeler or extra block-relay-only connection
+</Info>
+
+Manual connections via `-addnode` or the `addnode` RPC have a separate limit of 8 connections.
+
+### Thread Configuration
+
+Reduce thread count on memory-constrained systems:
+
+```bash
+# Default: CPU cores - 1
+bitcoind -par=<n>
+
+# Use 2 verification threads
+bitcoind -par=2
+
+# RPC threads (default: 16)
+bitcoind -rpcthreads=4
+```
+
+<Note>
+On Linux, each thread uses 8 MiB (64-bit) or 4 MiB (32-bit) for the thread stack.
+</Note>
+
+### Linux-Specific: Memory Allocator
+
+Reduce memory fragmentation on Linux:
+
+```bash
+#!/usr/bin/env bash
+export MALLOC_ARENA_MAX=1
+bitcoind
+```
+
+This limits glibc's `malloc` to a single arena, preventing excessive memory usage in some scenarios.
+
+<Info>
+This setting may theoretically reduce parallel allocation performance, but Bitcoin Core does minimal parallel allocation, so the impact is expected to be small or absent.
+</Info>
+
+## Reducing Network Traffic
+
+Optimize bandwidth usage for systems with limited or metered internet connections.
+
+### Upload Limits
+
+Limit outbound traffic per day:
+
+```bash
+# Limit to 5 GB upload per day  
+bitcoind -maxuploadtarget=5000
+```
+
+When the limit is approached:
+- Node stops serving historical blocks (older than one week)
+- Continues to serve recent blocks
+- Not a hard limit; minimizes traffic while staying functional
+
+<Tip>
+Supports suffix units: `[k|K|m|M|g|G|t|T]`
+- Lowercase = 1000-based (5000m = 5,000,000,000 bytes)
+- Uppercase = 1024-based (5000M = 5,242,880,000 bytes)
+- Default unit if none specified: M (1024-based)
+</Tip>
+
+Peers with the `download` permission are never disconnected but their traffic still counts.
+
+### Disable Listening
+
+Prevent inbound connections:
+
+```bash
+bitcoind -listen=0
+```
+
+This:
+- Limits connections to 11 outbound peers
+- Reduces upload bandwidth significantly  
+- Stops serving blocks to new nodes
+
+<Warning>
+Reducing connections to a minimum compromises Bitcoin's trustless model. Connecting to more peers improves security.
+</Warning>
+
+### Blocks-Only Mode for Bandwidth
+
+Disable transaction relay:
+
+```bash
+bitcoind -blocksonly
+```
+
+Effects on network traffic:
+- Drastically reduces P2P bandwidth
+- Stops relaying transactions to peers
+- Only synchronizes blocks
+
+Side effects:
+- Fee estimation stops working
+- Automatic wallet broadcasting is disabled (unless manually enabled)
+- Compact block relay is less efficient (slower block propagation)
+- Still receives transactions from peers with the `forcerelay` permission
+
+### Reduce Maximum Connections
+
+Fewer connections = less bandwidth:
+
+```bash
+# Limit to 20 total connections
+bitcoind -maxconnections=20
+```
+
+<Tip>
+Combining several options for minimal bandwidth:
+```bash
+bitcoind -maxuploadtarget=5000 \
+         -maxconnections=20 \
+         -blocksonly \
+         -listen=0
+```
+</Tip>
+
+## Storage Optimization
+
+### Enable Pruning
+
+Reduce disk space requirements:
+
+```bash
+# Keep approximately 10 GB of blocks
+bitcoind -prune=10000
+
+# Minimum: 550 MB
+bitcoind -prune=550
+```
+
+See the [Pruning documentation](/operations/pruning) for complete details.
+
+### Database Write Batch Size
+
+Adjust database write batching (advanced):
+
+```bash
+# Default: varies by system
+bitcoind -dbbatchsize=16777216
+```
+
+<Note>
+This is a debug option. Most users should not change it.
+</Note>
+
+## CPU Optimization
+
+### Script Verification Threads
+
+Balance CPU usage and validation speed:
+
+```bash
+# Auto-detect (default: CPU cores - 1)
+bitcoind -par=0
+
+# Use 4 threads
+bitcoind -par=4
+
+# Use all cores except 2
+bitcoind -par=-2
+```
+
+<Tip>
+- `par=0`: Auto-detect (recommended)
+- `par=N`: Use exactly N threads  
+- `par=-N`: Use all cores except N
+</Tip>
+
+### Script Cache Size
+
+Increasing signature cache can improve performance:
+
+```bash
+# Default: automatic based on dbcache
+bitcoind -maxsigcachesize=<n>
+```
+
+This is automatically tuned based on `-dbcache` and rarely needs manual adjustment.
+
+## I/O Optimization
+
+### Use SSD Storage
+
+The single most impactful hardware upgrade:
+
+- **IBD time**: 10-20x faster with SSD vs HDD
+- **Block validation**: Near-instant on SSD
+- **Reindex performance**: Dramatically improved
+
+<Tip>
+If you can't store everything on SSD:
+- Put `chainstate` on SSD (stores UTXO set, critical for performance)
+- Keep `blocks` on HDD (sequential access, less performance-critical)
+</Tip>
+
+### Separate Data Directories
+
+Split blockchain data across drives:
+
+```bash
+# Main data directory
+bitcoind -datadir=/path/to/hdd/bitcoin
+
+# Blocks directory on separate drive
+bitcoind -blocksdir=/path/to/storage/blocks
+```
+
+## Network Performance
+
+### DNS Seed Configuration
+
+Control peer discovery:
+
+```bash
+# Disable DNS seeds
+bitcoind -dnsseed=0
+
+# Always use DNS seeds
+bitcoind -forcednsseed=1
+```
+
+### Manual Peer Selection
+
+Connect to specific trusted nodes:
+
+```bash
+# Add specific peers
+bitcoind -addnode=<ip:port>
+
+# Connect only to specified peers
+bitcoind -connect=<ip:port>
+```
+
+<Warning>
+Using `-connect` disables automatic peer connections. Only use this if you trust your specified peers.
+</Warning>
+
+## Recommended Configurations
+
+### Low-Resource System (2 GB RAM, HDD)
+
+```ini
+# bitcoin.conf
+dbcache=512
+maxmempool=50
+maxconnections=20
+prune=10000
+blocksonly=1
+maxuploadtarget=5000
+```
+
+### Medium System (8 GB RAM, SSD)
+
+```ini
+# bitcoin.conf  
+dbcache=2048
+maxmempool=300
+maxconnections=125
+```
+
+### High-Performance System (16+ GB RAM, NVMe SSD)
+
+```ini
+# bitcoin.conf
+dbcache=8192
+maxmempool=1000
+maxconnections=200
+txindex=1
+```
+
+### Bandwidth-Constrained System
+
+```ini
+# bitcoin.conf
+maxuploadtarget=5000
+blocksonly=1
+listen=0
+maxconnections=15
+prune=10000
+```
+
+## Monitoring Performance
+
+### Check Memory Usage
+
+```bash
+# Linux/macOS
+ps aux | grep bitcoind
+
+# Detailed memory info
+bitcoin-cli getmemoryinfo
+```
+
+### Monitor Network Traffic
+
+```bash
+# Network info
+bitcoin-cli getnetworkinfo
+
+# Peer connections
+bitcoin-cli getpeerinfo
+
+# Net totals
+bitcoin-cli getnettotals
+```
+
+### Database Statistics
+
+```bash
+bitcoin-cli getblockchaininfo
+```
+
+Look for:
+- `size_on_disk`: Total blockchain size
+- `prune_target_size`: Pruning target (if enabled)
+- `blocks` vs `headers`: Sync progress
+
+## Performance Benchmarking
+
+For detailed performance analysis:
+
+```bash
+# Run built-in benchmarks
+bitcoin-cli getblockchaininfo
+bitcoin-cli getmempoolinfo
+```
+
+External tools:
+- [benchcoin](https://github.com/bitcoin-dev-tools/benchcoin) - Monitor IBD and reindex performance
+
+See the [Benchmarking documentation](https://github.com/bitcoin/bitcoin/blob/master/doc/benchmarking.md) for more information.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Initial Block Download" icon="download" href="/operations/initial-block-download">
+    Optimize IBD with these settings
+  </Card>
+  <Card title="Pruning" icon="scissors" href="/operations/pruning">
+    Enable pruning to save disk space
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/bitcoin-conf">
+    Learn about bitcoin.conf options
+  </Card>
+  <Card title="Running Bitcoin Core" icon="play" href="/operations/running-bitcoin-core">
+    Basic node operation guide
+  </Card>
+</CardGroup>

@@ -1,0 +1,505 @@
+---
+title: "Network RPC Methods"
+description: "Manage network connections, peers, and get network information using Bitcoin Core RPC methods"
+---
+
+# Network RPC Methods
+
+Network RPCs provide information about network status, peer connections, and allow management of network settings.
+
+## Network Information
+
+### getnetworkinfo
+
+Returns information about the node's network state.
+
+```bash
+bitcoin-cli getnetworkinfo
+```
+
+<ResponseField name="version" type="number">
+  Bitcoin Core version number
+</ResponseField>
+
+<ResponseField name="subversion" type="string">
+  User agent string
+</ResponseField>
+
+<ResponseField name="protocolversion" type="number">
+  Protocol version
+</ResponseField>
+
+<ResponseField name="localservices" type="string">
+  Services offered by this node (hex)
+</ResponseField>
+
+<ResponseField name="localservicesnames" type="array">
+  Human-readable service names
+</ResponseField>
+
+<ResponseField name="localrelay" type="boolean">
+  Whether transaction relay is enabled
+</ResponseField>
+
+<ResponseField name="timeoffset" type="number">
+  Time offset in seconds
+</ResponseField>
+
+<ResponseField name="connections" type="number">
+  Total number of connections
+</ResponseField>
+
+<ResponseField name="connections_in" type="number">
+  Number of inbound connections
+</ResponseField>
+
+<ResponseField name="connections_out" type="number">
+  Number of outbound connections
+</ResponseField>
+
+<ResponseField name="networkactive" type="boolean">
+  Whether p2p networking is enabled
+</ResponseField>
+
+<ResponseField name="networks" type="array">
+  Information per network (ipv4, ipv6, onion, i2p, cjdns)
+</ResponseField>
+
+<ResponseField name="relayfee" type="number">
+  Minimum relay fee for transactions
+</ResponseField>
+
+<ResponseField name="incrementalfee" type="number">
+  Minimum fee increment for mempool replacement
+</ResponseField>
+
+<ResponseField name="localaddresses" type="array">
+  List of local addresses
+</ResponseField>
+
+<ResponseField name="warnings" type="string">
+  Network warnings
+</ResponseField>
+
+## Peer Management
+
+### getpeerinfo
+
+Returns data about each connected network peer.
+
+```bash
+bitcoin-cli getpeerinfo
+```
+
+Returns array of peer objects with detailed information:
+
+<ResponseField name="id" type="number">
+  Peer index
+</ResponseField>
+
+<ResponseField name="addr" type="string">
+  IP address and port of the peer
+</ResponseField>
+
+<ResponseField name="addrbind" type="string">
+  Bind address of the connection to the peer
+</ResponseField>
+
+<ResponseField name="addrlocal" type="string">
+  Local address as reported by the peer
+</ResponseField>
+
+<ResponseField name="network" type="string">
+  Network type: ipv4, ipv6, onion, i2p, cjdns, not_publicly_routable
+</ResponseField>
+
+<ResponseField name="services" type="string">
+  Services offered by peer (hex)
+</ResponseField>
+
+<ResponseField name="servicesnames" type="array">
+  Human-readable service names
+</ResponseField>
+
+<ResponseField name="relaytxes" type="boolean">
+  Whether we relay transactions to this peer
+</ResponseField>
+
+<ResponseField name="lastsend" type="number">
+  Unix timestamp of last send
+</ResponseField>
+
+<ResponseField name="lastrecv" type="number">
+  Unix timestamp of last receive
+</ResponseField>
+
+<ResponseField name="last_transaction" type="number">
+  Unix timestamp of last valid transaction received
+</ResponseField>
+
+<ResponseField name="last_block" type="number">
+  Unix timestamp of last block received
+</ResponseField>
+
+<ResponseField name="bytessent" type="number">
+  Total bytes sent
+</ResponseField>
+
+<ResponseField name="bytesrecv" type="number">
+  Total bytes received
+</ResponseField>
+
+<ResponseField name="conntime" type="number">
+  Unix timestamp of connection time
+</ResponseField>
+
+<ResponseField name="pingtime" type="number">
+  Last ping time in seconds
+</ResponseField>
+
+<ResponseField name="minping" type="number">
+  Minimum observed ping time in seconds
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  Peer version
+</ResponseField>
+
+<ResponseField name="subver" type="string">
+  Peer user agent string
+</ResponseField>
+
+<ResponseField name="inbound" type="boolean">
+  True for inbound connections, false for outbound
+</ResponseField>
+
+<ResponseField name="synced_headers" type="number">
+  Last header we have in common with peer
+</ResponseField>
+
+<ResponseField name="synced_blocks" type="number">
+  Last block we have in common with peer
+</ResponseField>
+
+<ResponseField name="connection_type" type="string">
+  Connection type: outbound-full-relay, block-relay-only, inbound, manual, addr-fetch, feeler
+</ResponseField>
+
+<ResponseField name="transport_protocol_type" type="string">
+  Transport protocol: detecting, v1, v2 (BIP324 encrypted)
+</ResponseField>
+
+<ResponseField name="session_id" type="string">
+  Session ID for v2 transport (empty for v1)
+</ResponseField>
+
+### getconnectioncount
+
+Returns the number of connections to other nodes.
+
+```bash
+bitcoin-cli getconnectioncount
+```
+
+<ResponseField name="result" type="number">
+  Total number of connections
+</ResponseField>
+
+### ping
+
+Requests a ping be sent to all other nodes.
+
+```bash
+bitcoin-cli ping
+```
+
+<Note>
+Results are provided in `getpeerinfo`. The ping command measures processing backlog, not just network ping.
+</Note>
+
+### addnode
+
+Adds, removes, or tries a connection to a node.
+
+<ParamField name="node" type="string" required>
+  Node address (IP:port)
+</ParamField>
+
+<ParamField name="command" type="string" required>
+  Command: add, remove, onetry
+</ParamField>
+
+```bash
+# Add a node
+bitcoin-cli addnode "192.168.0.6:8333" "add"
+
+# Remove a node
+bitcoin-cli addnode "192.168.0.6:8333" "remove"
+
+# Try connecting to a node once
+bitcoin-cli addnode "192.168.0.6:8333" "onetry"
+```
+
+### disconnectnode
+
+Disconnects from a specified node.
+
+<ParamField name="address" type="string">
+  IP address and port of node (ip:port)
+</ParamField>
+
+<ParamField name="nodeid" type="number">
+  Node ID (alternative to address)
+</ParamField>
+
+```bash
+# Disconnect by address
+bitcoin-cli disconnectnode "192.168.0.6:8333"
+
+# Disconnect by node ID
+bitcoin-cli disconnectnode "" 1
+```
+
+<Note>
+Provide either `address` or `nodeid`, not both.
+</Note>
+
+### getaddednodeinfo
+
+Returns information about manually added nodes.
+
+<ParamField name="node" type="string">
+  Specific node to get info about (returns all if omitted)
+</ParamField>
+
+```bash
+# Get info about all added nodes
+bitcoin-cli getaddednodeinfo
+
+# Get info about specific node
+bitcoin-cli getaddednodeinfo "192.168.0.6:8333"
+```
+
+<ResponseField name="addednode" type="string">
+  Node address
+</ResponseField>
+
+<ResponseField name="connected" type="boolean">
+  Whether currently connected
+</ResponseField>
+
+<ResponseField name="addresses" type="array">
+  Connection addresses and connection status
+</ResponseField>
+
+### getnodeaddresses
+
+Returns known addresses from the node's address manager.
+
+<ParamField name="count" type="number" default="1">
+  Number of addresses to return
+</ParamField>
+
+<ParamField name="network" type="string">
+  Network type to filter: ipv4, ipv6, onion, i2p, cjdns
+</ParamField>
+
+```bash
+# Get 10 random addresses
+bitcoin-cli getnodeaddresses 10
+
+# Get 5 IPv4 addresses
+bitcoin-cli getnodeaddresses 5 "ipv4"
+```
+
+<ResponseField name="time" type="number">
+  Unix timestamp when address was last seen
+</ResponseField>
+
+<ResponseField name="services" type="number">
+  Services offered by node
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  Network address
+</ResponseField>
+
+<ResponseField name="port" type="number">
+  Network port
+</ResponseField>
+
+<ResponseField name="network" type="string">
+  Network type
+</ResponseField>
+
+## Network Control
+
+### setnetworkactive
+
+Enables or disables all P2P network activity.
+
+<ParamField name="state" type="boolean" required>
+  true to enable networking, false to disable
+</ParamField>
+
+```bash
+# Disable networking
+bitcoin-cli setnetworkactive false
+
+# Enable networking
+bitcoin-cli setnetworkactive true
+```
+
+<ResponseField name="result" type="boolean">
+  Current network state after command
+</ResponseField>
+
+<Warning>
+Disabling network activity will disconnect all peers. Re-enabling will not automatically reconnect to previous peers.
+</Warning>
+
+## Ban Management
+
+### listbanned
+
+Lists all manually banned IP addresses/subnets.
+
+```bash
+bitcoin-cli listbanned
+```
+
+<ResponseField name="address" type="string">
+  Banned IP/subnet
+</ResponseField>
+
+<ResponseField name="ban_created" type="number">
+  Unix timestamp when ban was created
+</ResponseField>
+
+<ResponseField name="banned_until" type="number">
+  Unix timestamp when ban expires
+</ResponseField>
+
+### setban
+
+Adds or removes an IP/subnet from the banned list.
+
+<ParamField name="subnet" type="string" required>
+  IP/subnet (e.g., 192.168.0.6 or 192.168.0.0/24)
+</ParamField>
+
+<ParamField name="command" type="string" required>
+  Command: add or remove
+</ParamField>
+
+<ParamField name="bantime" type="number" default="0">
+  Time in seconds the ban lasts (0 = until restart, omit for default 24h)
+</ParamField>
+
+<ParamField name="absolute" type="boolean" default="false">
+  If true, bantime is an absolute Unix timestamp
+</ParamField>
+
+```bash
+# Ban IP for 24 hours (default)
+bitcoin-cli setban "192.168.0.6" "add"
+
+# Ban subnet for 1 hour
+bitcoin-cli setban "192.168.0.0/24" "add" 3600
+
+# Remove ban
+bitcoin-cli setban "192.168.0.6" "remove"
+```
+
+### clearbanned
+
+Clears all banned IPs.
+
+```bash
+bitcoin-cli clearbanned
+```
+
+## Traffic Control
+
+### getnettotals
+
+Returns information about network traffic, including bytes received and sent.
+
+```bash
+bitcoin-cli getnettotals
+```
+
+<ResponseField name="totalbytesrecv" type="number">
+  Total bytes received
+</ResponseField>
+
+<ResponseField name="totalbytessent" type="number">
+  Total bytes sent
+</ResponseField>
+
+<ResponseField name="timemillis" type="number">
+  Current Unix time in milliseconds
+</ResponseField>
+
+<ResponseField name="uploadtarget" type="object">
+  Upload target information:
+  - `timeframe`: Target timeframe in seconds
+  - `target`: Target in bytes (0 = no limit)
+  - `target_reached`: Whether target was reached
+  - `serve_historical_blocks`: Whether serving historical blocks
+  - `bytes_left_in_cycle`: Bytes left in current cycle
+  - `time_left_in_cycle`: Seconds left in current cycle
+</ResponseField>
+
+## Connection Types
+
+Bitcoin Core maintains different types of connections:
+
+<ParamField name="outbound-full-relay" type="connection">
+  Default automatic connections that relay all data
+</ParamField>
+
+<ParamField name="block-relay-only" type="connection">
+  Does not relay transactions or addresses (privacy-preserving)
+</ParamField>
+
+<ParamField name="inbound" type="connection">
+  Connection initiated by the peer
+</ParamField>
+
+<ParamField name="manual" type="connection">
+  Added via addnode RPC or -addnode/-connect configuration
+</ParamField>
+
+<ParamField name="addr-fetch" type="connection">
+  Short-lived automatic connection for soliciting addresses
+</ParamField>
+
+<ParamField name="feeler" type="connection">
+  Short-lived automatic connection for testing addresses
+</ParamField>
+
+## Transport Protocols
+
+<ParamField name="v1" type="protocol">
+  Plaintext transport protocol (legacy)
+</ParamField>
+
+<ParamField name="v2" type="protocol">
+  BIP324 encrypted transport protocol (recommended)
+</ParamField>
+
+<ParamField name="detecting" type="protocol">
+  Peer could be v1 or v2 (negotiation in progress)
+</ParamField>
+
+## Network Types
+
+Bitcoin Core supports multiple network types:
+
+- **ipv4**: IPv4 connections
+- **ipv6**: IPv6 connections  
+- **onion**: Tor hidden service connections
+- **i2p**: I2P (Invisible Internet Project) connections
+- **cjdns**: CJDNS network connections
+- **not_publicly_routable**: Internal/private network connections

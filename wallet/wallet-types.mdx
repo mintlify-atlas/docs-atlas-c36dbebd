@@ -1,0 +1,199 @@
+---
+title: Wallet Types
+description: Understanding legacy wallets and descriptor wallets in Bitcoin Core
+---
+
+Bitcoin Core supports two types of wallets: legacy wallets and descriptor wallets. As of version 0.21, descriptor wallets are the default and recommended wallet type.
+
+## Descriptor Wallets
+
+Descriptor wallets use [output descriptors](/advanced/descriptors) to deterministically derive all scriptPubKeys and associated information. They provide a more structured and flexible approach to wallet management.
+
+### Key Features
+
+**Deterministic Script Generation**
+
+Descriptor wallets use output descriptors to specify exactly how addresses and scripts are derived. This makes wallets more predictable and easier to backup.
+
+**Clear Separation of Script Types**
+
+Each descriptor handles a specific script type (P2PKH, P2WPKH, P2TR, etc.), providing better organization and reducing ambiguity.
+
+**No Key Import Mixing**
+
+Descriptor wallets do not support mixing private keys and watch-only scripts in the same wallet, improving security and clarity.
+
+**Better Hardware Wallet Support**
+
+The descriptor format aligns well with hardware wallet standards, making external signer integration more reliable.
+
+### Creating a Descriptor Wallet
+
+Descriptor wallets are created by default:
+
+```bash
+bitcoin-cli createwallet "my-descriptor-wallet"
+```
+
+To explicitly specify descriptor wallet type:
+
+```bash
+bitcoin-cli -named createwallet wallet_name="my-wallet" descriptors=true
+```
+
+### Viewing Descriptors
+
+List all descriptors in a descriptor wallet:
+
+```bash
+bitcoin-cli -rpcwallet="my-descriptor-wallet" listdescriptors
+```
+
+This returns descriptors for different purposes:
+- **Receiving addresses**: External addresses shared with others
+- **Change addresses**: Internal addresses for change outputs
+- **Script types**: Separate descriptors for P2PKH, P2WPKH, P2TR, etc.
+
+### Importing Descriptors
+
+Import descriptors into a descriptor wallet:
+
+```bash
+bitcoin-cli -rpcwallet="my-wallet" importdescriptors '[
+  {
+    "desc": "wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)#checksum",
+    "timestamp": "now",
+    "active": true,
+    "internal": false
+  }
+]'
+```
+
+## Legacy Wallets
+
+Legacy wallets represent the traditional Bitcoin Core wallet format used before version 0.21. While still supported, they are deprecated in favor of descriptor wallets.
+
+### Characteristics
+
+**Non-Deterministic Original Format**
+
+Original legacy wallets (pre-0.13) used a collection of random, unrelated private keys. These required frequent backups to avoid losing funds.
+
+**HD Support Since 0.13**
+
+Since version 0.13, legacy wallets support Hierarchical Deterministic (HD) key derivation, allowing a single backup to recover all future keys.
+
+**Mixed Script Support**
+
+Legacy wallets can contain a mixture of script types and both private keys and watch-only scripts in the same wallet.
+
+**Implicit Script Generation**
+
+Scripts are generated implicitly rather than being explicitly defined by descriptors.
+
+### Creating a Legacy Wallet
+
+<Warning>
+Legacy wallets are deprecated. Only create a legacy wallet if you have a specific compatibility requirement. New users should always use descriptor wallets.
+</Warning>
+
+```bash
+bitcoin-cli -named createwallet wallet_name="my-legacy-wallet" descriptors=false
+```
+
+### Limitations of Legacy Wallets
+
+- Less predictable address generation
+- Harder to audit and verify which scripts the wallet controls
+- Poor compatibility with modern hardware wallets
+- Cannot use advanced features like Taproot by default
+- More complex backup requirements for non-HD legacy wallets
+
+## Comparing Wallet Types
+
+| Feature | Descriptor Wallets | Legacy Wallets |
+|---------|-------------------|----------------|
+| Default since version | 0.21 | Pre-0.21 |
+| Script derivation | Explicit via descriptors | Implicit |
+| Backup simplicity | Single backup sufficient (HD) | Single backup sufficient (HD only, since 0.13) |
+| Script type separation | Clear separation | Mixed types |
+| Watch-only support | Separate wallet required | Can mix with private keys |
+| Hardware wallet support | Excellent | Limited |
+| Taproot support | Native | Requires migration |
+| Future development | Actively developed | Deprecated |
+
+## Output Descriptor Format
+
+Descriptor wallets use output descriptors to define scripts. Common descriptor types include:
+
+### P2PKH (Legacy addresses)
+
+```
+pkh([fingerprint/44h/0h/0h]xpub.../0/*)
+```
+
+### P2WPKH (Native SegWit)
+
+```
+wpkh([fingerprint/84h/0h/0h]xpub.../0/*)
+```
+
+### P2SH-P2WPKH (Nested SegWit)
+
+```
+sh(wpkh([fingerprint/49h/0h/0h]xpub.../0/*))
+```
+
+### P2TR (Taproot)
+
+```
+tr([fingerprint/86h/0h/0h]xpub.../0/*)
+```
+
+See the [Output Descriptors documentation](/advanced/descriptors) for complete syntax and examples.
+
+## Watch-Only Wallets
+
+Both wallet types support watch-only mode, where the wallet tracks addresses without storing private keys.
+
+### Creating a Watch-Only Descriptor Wallet
+
+```bash
+bitcoin-cli -named createwallet wallet_name="watch-only" disable_private_keys=true
+```
+
+Then import descriptors without private keys:
+
+```bash
+bitcoin-cli -rpcwallet="watch-only" importdescriptors '[
+  {
+    "desc": "wpkh(xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)#checksum",
+    "timestamp": "now",
+    "watchonly": true
+  }
+]'
+```
+
+## Choosing the Right Wallet Type
+
+<Steps>
+  <Step title="For New Wallets">
+    Always use descriptor wallets (the default). They provide better security, clarity, and future compatibility.
+  </Step>
+  
+  <Step title="For Existing Legacy Wallets">
+    Consider migrating to descriptor wallets using the `migratewallet` RPC. See [Wallet Migration](/wallet/migration) for details.
+  </Step>
+  
+  <Step title="For Compatibility Requirements">
+    Only use legacy wallets if you must maintain compatibility with very old software that cannot handle descriptors.
+  </Step>
+</Steps>
+
+## Practical Recommendations
+
+- Use descriptor wallets for all new wallet creation
+- Migrate existing legacy wallets to take advantage of modern features
+- Use separate wallets for different purposes (e.g., one for receiving, one for cold storage)
+- Always test wallet restoration procedures before storing significant funds
+- Keep descriptors and backups in multiple secure locations

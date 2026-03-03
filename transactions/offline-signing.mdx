@@ -1,0 +1,377 @@
+---
+title: Offline Transaction Signing
+description: Sign Bitcoin transactions on an air-gapped machine for maximum security using PSBTs
+---
+
+Offline signing (also called "cold storage signing" or "air-gapped signing") dramatically increases security by keeping private keys on a device that never connects to any network.
+
+This guide demonstrates using two Bitcoin Core instances: one online (watch-only) and one completely offline (with private keys).
+
+## Overview
+
+The offline signing workflow uses Partially Signed Bitcoin Transactions (PSBTs) to transfer transaction data between the online and offline environments:
+
+```
+Online Wallet (watch-only)    Offline Wallet (private keys)
+         │                              │
+         ├──── Create unsigned PSBT ────►│
+         │                              │
+         │                          Sign PSBT
+         │                              │
+         │◄──── Return signed PSBT ─────┤
+         │                              │
+    Broadcast                           │
+```
+
+<Warning>
+  **Security Requirements:**
+  - Offline device must NEVER connect to internet, WiFi, Bluetooth, or any network
+  - Transfer data only via USB drive, QR codes, or other physical media
+  - Verify all transaction details on the offline device before signing
+</Warning>
+
+## Prerequisites
+
+- Two devices with Bitcoin Core installed
+- USB drive or other air-gapped data transfer method
+- `jq` for JSON processing (optional)
+
+<Note>
+  This tutorial uses signet for demonstration. For mainnet, omit the `-signet` flag from all commands.
+</Note>
+
+## Setup: Create the Offline Wallet
+
+<Steps>
+  <Step title="Create encrypted wallet on offline device">
+    On your **offline machine**, create a wallet with a strong passphrase:
+
+    ```bash
+    [offline]$ bitcoin-cli -signet -named createwallet \
+      wallet_name="offline_wallet" \
+      passphrase="your-strong-passphrase"
+    ```
+
+    <Warning>
+      The passphrase encrypts your wallet.dat file. Without it, even an attacker with physical access cannot spend your bitcoin. Choose a strong, unique passphrase and store it securely.
+    </Warning>
+  </Step>
+
+  <Step title="Export public descriptors">
+    Export the wallet's public key descriptors to a file:
+
+    ```bash
+    [offline]$ bitcoin-cli -signet -rpcwallet="offline_wallet" \
+      listdescriptors | jq -r '.descriptors' \
+      > descriptors.json
+    ```
+
+    This creates a JSON file containing public key information only (no private keys).
+  </Step>
+
+  <Step title="Transfer descriptors to online device">
+    Copy `descriptors.json` to a USB drive and physically transfer it to your online device.
+  </Step>
+</Steps>
+
+## Setup: Create the Watch-Only Wallet
+
+<Steps>
+  <Step title="Create blank watch-only wallet">
+    On your **online machine**, create a wallet that can't hold private keys:
+
+    ```bash
+    [online]$ bitcoin-cli -signet -named createwallet \
+      wallet_name="watch_only_wallet" \
+      disable_private_keys=true \
+      blank=true
+    ```
+  </Step>
+
+  <Step title="Import descriptors from offline wallet">
+    Import the public descriptors from the offline wallet:
+
+    ```bash
+    [online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" \
+      importdescriptors "$(cat descriptors.json)"
+    ```
+
+    You should see multiple `"success": true` responses.
+  </Step>
+
+  <Step title="Verify wallet setup">
+    Both wallets now generate identical addresses:
+
+    ```bash
+    [online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" getnewaddress
+    ```
+
+    The watch-only wallet can track transactions but cannot sign them.
+  </Step>
+</Steps>
+
+## Receiving Bitcoin
+
+Generate a receiving address using either wallet (they produce the same addresses):
+
+```bash
+[online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" getnewaddress
+
+tb1qtu5qgc6ddhmqm5yqjvhg83qgk2t4ewajg0h6yh
+```
+
+For signet testing, get coins from the faucet:
+
+```bash
+./contrib/signet/getcoins.py -a tb1qtu5qgc6ddhmqm5yqjvhg83qgk2t4ewajg0h6yh
+```
+
+Or visit [https://signetfaucet.com](https://signetfaucet.com)
+
+Verify receipt:
+
+```bash
+[online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" listunspent
+```
+
+## Spending Bitcoin (Complete Workflow)
+
+<Steps>
+  <Step title="Create unsigned PSBT on online wallet">
+    Create a funded but unsigned PSBT:
+
+    ```bash
+    [online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" send \
+      '{"tb1q9k5w0nhnhyeh78snpxh0t5t7c3lxdeg3erez32": 0.009}' \
+      | jq -r '.psbt' > funded_psbt.txt
+    ```
+
+    This creates a transaction sending 0.009 BTC to the specified address.
+  </Step>
+
+  <Step title="Transfer PSBT to offline device">
+    Copy `funded_psbt.txt` to your USB drive and physically move it to the offline machine.
+  </Step>
+
+  <Step title="Analyze PSBT on offline device">
+    Before signing, verify the transaction details:
+
+    ```bash
+    [offline]$ bitcoin-cli -signet decodepsbt $(cat funded_psbt.txt)
+    ```
+
+    Check:
+    - Output addresses are correct
+    - Amounts match your intention
+    - Fee is reasonable
+
+    Analyze what needs signing:
+
+    ```bash
+    [offline]$ bitcoin-cli -signet analyzepsbt $(cat funded_psbt.txt)
+    ```
+  </Step>
+
+  <Step title="Unlock wallet with passphrase">
+    Unlock the offline wallet temporarily (60 seconds):
+
+    ```bash
+    [offline]$ bitcoin-cli -signet -rpcwallet="offline_wallet" \
+      walletpassphrase "your-strong-passphrase" 60
+    ```
+  </Step>
+
+  <Step title="Sign the PSBT">
+    Sign the transaction with your private keys:
+
+    ```bash
+    [offline]$ bitcoin-cli -signet -rpcwallet="offline_wallet" \
+      walletprocesspsbt $(cat funded_psbt.txt) \
+      | jq -r .hex > signed_psbt.txt
+    ```
+
+    The wallet automatically locks again after 60 seconds.
+  </Step>
+
+  <Step title="Transfer signed PSBT back to online device">
+    Copy `signed_psbt.txt` to USB drive and move to online machine.
+  </Step>
+
+  <Step title="Broadcast the transaction">
+    On the online machine, broadcast the signed transaction:
+
+    ```bash
+    [online]$ bitcoin-cli -signet sendrawtransaction $(cat signed_psbt.txt)
+    ```
+
+    This returns the transaction ID (txid).
+  </Step>
+
+  <Step title="Verify broadcast">
+    Confirm the transaction was broadcast:
+
+    ```bash
+    [online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" \
+      listtransactions
+    ```
+  </Step>
+</Steps>
+
+## Checking Balance
+
+View balance using the watch-only wallet:
+
+```bash
+[online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" getbalances
+```
+
+This shows:
+- `trusted` - Confirmed balance (spendable)
+- `untrusted_pending` - Unconfirmed incoming
+- `immature` - Coinbase transactions still maturing
+
+## Alternative: Using walletcreatefundedpsbt
+
+For more control, use `walletcreatefundedpsbt` instead of `send`:
+
+```bash
+[online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" \
+  walletcreatefundedpsbt \
+  '[]' \
+  '{"destination_address": 0.009}' \
+  | jq -r '.psbt' > funded_psbt.txt
+```
+
+Leaving inputs empty `[]` allows automatic coin selection.
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Measures:**
+
+  **Offline Device:**
+  - Never connect to any network (internet, WiFi, Bluetooth, etc.)
+  - Disable all network hardware if possible
+  - Keep in a physically secure location
+  - Use full disk encryption
+  - Store wallet backups securely and separately
+
+  **Online Device:**
+  - Keep Bitcoin Core updated
+  - Use firewall and antivirus
+  - Regularly verify wallet is watch-only: `getwalletinfo` should show `"private_keys_enabled": false`
+
+  **PSBT Transfer:**
+  - Use dedicated USB drive (no other files)
+  - Scan USB for malware on online device before use
+  - Consider using QR codes for small transactions
+
+  **Transaction Verification:**
+  - Always decode and review PSBTs before signing
+  - Verify recipient addresses independently
+  - Check amounts and fees carefully
+  - Don't rush - take time to verify everything
+</Warning>
+
+## Backup and Recovery
+
+### What to Backup
+
+1. **Offline wallet seed phrase** (if using HD wallet)
+2. **Wallet passphrase** (store separately from seed!)
+3. **wallet.dat file** from offline wallet (encrypted)
+4. **Descriptors** (for recreating watch-only wallet)
+
+### Recovery Process
+
+If you need to recover:
+
+1. **Restore offline wallet**:
+   ```bash
+   # If you have wallet.dat
+   [offline]$ cp backup/wallet.dat ~/.bitcoin/signet/wallets/offline_wallet/
+   
+   # Or restore from seed phrase (method varies by wallet creation)
+   ```
+
+2. **Export descriptors** from restored wallet
+
+3. **Recreate watch-only wallet** on new online device
+
+4. **Import descriptors** as shown in setup section
+
+## Advanced: Multisig with Offline Signing
+
+Combine offline signing with multisig for maximum security:
+
+```bash
+# Create 2-of-3 multisig where one key is always offline
+# - Key 1: Online hot wallet
+# - Key 2: Offline cold wallet  
+# - Key 3: Backup key (offline, separate location)
+```
+
+See the [Multisig guide](/transactions/multisig) for setup details.
+
+## Troubleshooting
+
+### "Insufficient funds" on Watch-Only Wallet
+
+Ensure transactions have confirmations:
+
+```bash
+[online]$ bitcoin-cli -signet -rpcwallet="watch_only_wallet" \
+  listunspent 1  # Minimum 1 confirmation
+```
+
+### "Wallet is locked" When Signing
+
+Unlock wallet with passphrase:
+
+```bash
+[offline]$ bitcoin-cli -signet -rpcwallet="offline_wallet" \
+  walletpassphrase "passphrase" 120
+```
+
+### "Private keys are disabled"
+
+You're trying to sign with the watch-only wallet. Always sign on the offline device.
+
+### PSBT Decode Error
+
+Ensure PSBT string is complete and not corrupted during transfer. Check file size and compare checksums.
+
+## Alternative Offline Methods
+
+### QR Code Transfer
+
+For small transactions, use QR codes:
+
+1. Generate PSBT on online device
+2. Display as QR code
+3. Scan with offline device camera
+4. Sign and encode as QR
+5. Scan QR back to online device
+
+Note: Bitcoin Core doesn't have built-in QR support; requires external tools.
+
+### Hardware Wallets
+
+Hardware wallets provide similar security with better UX:
+- Purpose-built secure element
+- Screen for verification
+- Direct USB/Bluetooth signing
+- Support for multiple cryptocurrencies
+
+Bitcoin Core supports hardware wallets via [HWI](https://github.com/bitcoin-core/HWI).
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PSBT Deep Dive" icon="file-signature" href="/transactions/psbt">
+    Learn more about PSBT internals and advanced usage
+  </Card>
+  <Card title="Multisig" icon="users" href="/transactions/multisig">
+    Combine offline signing with multi-signature security
+  </Card>
+</CardGroup>

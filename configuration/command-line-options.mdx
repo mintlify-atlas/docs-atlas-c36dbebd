@@ -1,0 +1,691 @@
+---
+title: "Command-Line Options"
+description: "Complete reference for bitcoind and bitcoin-qt command-line arguments"
+---
+
+Command-line options allow you to configure Bitcoin Core at startup. These options can also be specified in the `bitcoin.conf` file (without the leading `-`).
+
+## Usage
+
+```bash
+bitcoind [options]
+bitcoin-qt [options]
+```
+
+<Info>
+  Command-line options override values set in the configuration file, and configuration file options override values set in the GUI.
+</Info>
+
+## General Options
+
+<ParamField path="-?" type="flag">
+  Print help message and exit
+  
+  ```bash
+  bitcoind -?
+  ```
+</ParamField>
+
+<ParamField path="-help" type="flag">
+  Print help message with all options and exit
+  
+  ```bash
+  bitcoind -help
+  ```
+</ParamField>
+
+<ParamField path="-version" type="flag">
+  Print version and exit
+  
+  ```bash
+  bitcoind -version
+  ```
+</ParamField>
+
+<ParamField path="-conf" type="string" default="bitcoin.conf">
+  Specify path to read-only configuration file. Relative paths are prefixed by datadir location.
+  
+  ```bash
+  bitcoind -conf=/etc/bitcoin/bitcoin.conf
+  ```
+</ParamField>
+
+<ParamField path="-datadir" type="string">
+  Specify data directory. Cannot be negated.
+  
+  ```bash
+  bitcoind -datadir=/mnt/bitcoin
+  ```
+</ParamField>
+
+<ParamField path="-settings" type="string" default="settings.json">
+  Specify path to dynamic settings data file. Can be disabled with `-nosettings`.
+  
+  ```bash
+  bitcoind -settings=/var/lib/bitcoin/settings.json
+  ```
+</ParamField>
+
+<ParamField path="-pid" type="string" default="bitcoind.pid">
+  Specify PID file. Relative paths are prefixed by datadir location.
+  
+  ```bash
+  bitcoind -pid=/var/run/bitcoind.pid
+  ```
+</ParamField>
+
+## Chain Selection Options
+
+<ParamField path="-chain" type="string" default="main">
+  Use the specified chain: `main`, `test`, `testnet4`, `signet`, or `regtest`
+  
+  ```bash
+  bitcoind -chain=regtest
+  ```
+</ParamField>
+
+<ParamField path="-testnet" type="flag">
+  Use the test network (testnet3)
+  
+  ```bash
+  bitcoind -testnet
+  ```
+</ParamField>
+
+<ParamField path="-testnet4" type="flag">
+  Use the testnet4 test network
+  
+  ```bash
+  bitcoind -testnet4
+  ```
+</ParamField>
+
+<ParamField path="-signet" type="flag">
+  Use the signet test network
+  
+  ```bash
+  bitcoind -signet
+  ```
+</ParamField>
+
+<ParamField path="-regtest" type="flag">
+  Enter regression test mode, which uses a special chain for testing
+  
+  ```bash
+  bitcoind -regtest
+  ```
+</ParamField>
+
+## Database Options
+
+<ParamField path="-dbcache" type="number" default="450">
+  Maximum database cache size in MiB (minimum 4). Unused memory is shared with mempool.
+  
+  ```bash
+  bitcoind -dbcache=4096
+  ```
+</ParamField>
+
+<ParamField path="-blocksdir" type="string">
+  Specify directory to hold blocks subdirectory for *.dat files
+  
+  ```bash
+  bitcoind -blocksdir=/mnt/storage/blocks
+  ```
+</ParamField>
+
+<ParamField path="-txindex" type="boolean" default="0">
+  Maintain a full transaction index, used by the getrawtransaction RPC
+  
+  ```bash
+  bitcoind -txindex=1
+  ```
+</ParamField>
+
+<ParamField path="-txospenderindex" type="boolean" default="0">
+  Maintain a transaction output spender index, used by the gettxspendingprevout RPC
+  
+  ```bash
+  bitcoind -txospenderindex=1
+  ```
+</ParamField>
+
+<ParamField path="-coinstatsindex" type="boolean" default="0">
+  Maintain coinstats index used by the gettxoutsetinfo RPC
+  
+  ```bash
+  bitcoind -coinstatsindex=1
+  ```
+</ParamField>
+
+<ParamField path="-blockfilterindex" type="string">
+  Maintain an index of compact filters for blocks. Supported types: `basic`
+  
+  ```bash
+  bitcoind -blockfilterindex=basic
+  ```
+</ParamField>
+
+<ParamField path="-prune" type="number" default="0">
+  Reduce storage by pruning old blocks. Value is target size in MiB (minimum 550). 0 = disable pruning.
+  
+  ```bash
+  bitcoind -prune=10000
+  ```
+</ParamField>
+
+<ParamField path="-reindex" type="flag">
+  Rebuild chain state and block index from block files on disk
+  
+  ```bash
+  bitcoind -reindex
+  ```
+</ParamField>
+
+<ParamField path="-reindex-chainstate" type="flag">
+  Rebuild chain state from block index
+  
+  ```bash
+  bitcoind -reindex-chainstate
+  ```
+</ParamField>
+
+## Network Options
+
+<ParamField path="-listen" type="boolean" default="1">
+  Accept connections from outside (default: 1 if no -proxy or -connect)
+  
+  ```bash
+  bitcoind -listen=1
+  ```
+</ParamField>
+
+<ParamField path="-port" type="number">
+  Listen for connections on specified port. Default: 8333 (mainnet), 18333 (testnet3), 18444 (testnet4), 38333 (signet), 18444 (regtest)
+  
+  ```bash
+  bitcoind -port=8333
+  ```
+</ParamField>
+
+<ParamField path="-bind" type="string">
+  Bind to given address and always listen on it. Use [host]:port notation for IPv6.
+  
+  ```bash
+  bitcoind -bind=0.0.0.0:8333
+  ```
+</ParamField>
+
+<ParamField path="-maxconnections" type="number" default="125">
+  Maintain at most this many connections to peers. Does not apply to manual connections via -addnode.
+  
+  ```bash
+  bitcoind -maxconnections=200
+  ```
+</ParamField>
+
+<ParamField path="-addnode" type="string">
+  Add a node to connect to and attempt to keep the connection open. Can be specified multiple times.
+  
+  ```bash
+  bitcoind -addnode=69.164.218.197 -addnode=10.0.0.2:8333
+  ```
+</ParamField>
+
+<ParamField path="-connect" type="string">
+  Connect only to the specified node(s). `-noconnect` disables automatic connections.
+  
+  ```bash
+  bitcoind -connect=192.168.1.100
+  ```
+</ParamField>
+
+<ParamField path="-seednode" type="string">
+  Connect to a node to retrieve peer addresses, then disconnect. Can be specified multiple times.
+  
+  ```bash
+  bitcoind -seednode=seed.bitcoin.sipa.be
+  ```
+</ParamField>
+
+<ParamField path="-proxy" type="string">
+  Connect through SOCKS5 proxy. Format: `<ip:port|path>[=<network>]`
+  
+  ```bash
+  bitcoind -proxy=127.0.0.1:9050
+  ```
+</ParamField>
+
+<ParamField path="-onion" type="string">
+  Use separate SOCKS5 proxy to reach peers via Tor onion services. Set `-noonion` to disable.
+  
+  ```bash
+  bitcoind -onion=127.0.0.1:9050
+  ```
+</ParamField>
+
+<ParamField path="-i2psam" type="string">
+  I2P SAM proxy to reach I2P peers and accept I2P connections
+  
+  ```bash
+  bitcoind -i2psam=127.0.0.1:7656
+  ```
+</ParamField>
+
+<ParamField path="-onlynet" type="string">
+  Make automatic outbound connections only to specified network. Can be specified multiple times. Values: `ipv4`, `ipv6`, `onion`, `i2p`, `cjdns`
+  
+  ```bash
+  bitcoind -onlynet=ipv4 -onlynet=ipv6
+  ```
+</ParamField>
+
+<ParamField path="-dns" type="boolean" default="1">
+  Allow DNS lookups for -addnode, -seednode and -connect
+  
+  ```bash
+  bitcoind -dns=1
+  ```
+</ParamField>
+
+<ParamField path="-dnsseed" type="boolean" default="1">
+  Query for peer addresses via DNS lookup if low on addresses
+  
+  ```bash
+  bitcoind -dnsseed=1
+  ```
+</ParamField>
+
+<ParamField path="-discover" type="boolean">
+  Discover own IP addresses (default: 1 when listening and no -externalip or -proxy)
+  
+  ```bash
+  bitcoind -discover=1
+  ```
+</ParamField>
+
+<ParamField path="-externalip" type="string">
+  Specify your own public address
+  
+  ```bash
+  bitcoind -externalip=203.0.113.42
+  ```
+</ParamField>
+
+<ParamField path="-maxuploadtarget" type="string" default="0">
+  Keep outbound traffic under given target per 24h. 0 = no limit. Suffix units: k|K|m|M|g|G|t|T
+  
+  ```bash
+  bitcoind -maxuploadtarget=144M
+  ```
+</ParamField>
+
+<ParamField path="-timeout" type="number" default="5000">
+  Specify socket connection timeout in milliseconds (minimum: 1)
+  
+  ```bash
+  bitcoind -timeout=10000
+  ```
+</ParamField>
+
+## RPC Server Options
+
+<ParamField path="-server" type="flag">
+  Accept command line and JSON-RPC commands
+  
+  ```bash
+  bitcoind -server
+  ```
+</ParamField>
+
+<ParamField path="-rest" type="boolean" default="0">
+  Accept public REST requests
+  
+  ```bash
+  bitcoind -rest=1
+  ```
+</ParamField>
+
+<ParamField path="-rpcbind" type="string" default="127.0.0.1">
+  Bind to given address to listen for JSON-RPC connections. Use [host]:port notation for IPv6.
+  
+  ```bash
+  bitcoind -rpcbind=127.0.0.1:8332 -rpcbind=[::1]:8332
+  ```
+</ParamField>
+
+<ParamField path="-rpcport" type="number">
+  Listen for JSON-RPC connections on specified port. Default: 8332 (mainnet), 18332 (testnet3), 18443 (regtest)
+  
+  ```bash
+  bitcoind -rpcport=8332
+  ```
+</ParamField>
+
+<ParamField path="-rpcallowip" type="string" default="127.0.0.1">
+  Allow JSON-RPC connections from specified source. Can specify IP, network/netmask, or network/CIDR. Can be specified multiple times.
+  
+  ```bash
+  bitcoind -rpcallowip=192.168.1.0/24 -rpcallowip=10.0.0.5
+  ```
+</ParamField>
+
+<ParamField path="-rpcuser" type="string">
+  Username for JSON-RPC connections
+  
+  ```bash
+  bitcoind -rpcuser=bitcoinrpc
+  ```
+</ParamField>
+
+<ParamField path="-rpcpassword" type="string">
+  Password for JSON-RPC connections
+  
+  ```bash
+  bitcoind -rpcpassword=your-secure-password
+  ```
+</ParamField>
+
+<ParamField path="-rpcauth" type="string">
+  Username and HMAC-SHA-256 hashed password. Format: `<USERNAME>:<SALT>$<HASH>`. Can be specified multiple times.
+  
+  ```bash
+  bitcoind -rpcauth=alice:e3c4f2a7$0f2d...
+  ```
+</ParamField>
+
+<ParamField path="-rpccookiefile" type="string">
+  Location of the auth cookie. Relative paths are prefixed by datadir location.
+  
+  ```bash
+  bitcoind -rpccookiefile=/var/lib/bitcoin/.cookie
+  ```
+</ParamField>
+
+<ParamField path="-rpcthreads" type="number" default="4">
+  Set the number of threads to service RPC calls
+  
+  ```bash
+  bitcoind -rpcthreads=8
+  ```
+</ParamField>
+
+<ParamField path="-rpcworkqueue" type="number" default="16">
+  Set the depth of the work queue to service RPC calls
+  
+  ```bash
+  bitcoind -rpcworkqueue=32
+  ```
+</ParamField>
+
+<ParamField path="-rpcwhitelist" type="string">
+  Set a whitelist to filter incoming RPC calls. Format: `<USERNAME>:<rpc 1>,<rpc 2>,...`
+  
+  ```bash
+  bitcoind -rpcwhitelist=user1:getblockcount,getbestblockhash
+  ```
+</ParamField>
+
+## Mempool Options
+
+<ParamField path="-maxmempool" type="number" default="300">
+  Keep the transaction memory pool below specified megabytes
+  
+  ```bash
+  bitcoind -maxmempool=500
+  ```
+</ParamField>
+
+<ParamField path="-mempoolexpiry" type="number" default="336">
+  Do not keep transactions in the mempool longer than specified hours
+  
+  ```bash
+  bitcoind -mempoolexpiry=72
+  ```
+</ParamField>
+
+<ParamField path="-persistmempool" type="boolean" default="1">
+  Whether to save the mempool on shutdown and load on restart
+  
+  ```bash
+  bitcoind -persistmempool=1
+  ```
+</ParamField>
+
+<ParamField path="-blocksonly" type="boolean" default="0">
+  Reject transactions from network peers. Disables automatic broadcast and rebroadcast.
+  
+  ```bash
+  bitcoind -blocksonly=1
+  ```
+</ParamField>
+
+## Transaction Relay Options
+
+<ParamField path="-minrelaytxfee" type="number" default="0.00001">
+  Fees (in BTC/kvB) smaller than this are considered zero fee for relaying, mining, and transaction creation
+  
+  ```bash
+  bitcoind -minrelaytxfee=0.00001
+  ```
+</ParamField>
+
+<ParamField path="-datacarrier" type="boolean" default="1">
+  Relay and mine data carrier transactions
+  
+  ```bash
+  bitcoind -datacarrier=1
+  ```
+</ParamField>
+
+<ParamField path="-datacarriersize" type="number" default="83">
+  Maximum size of data-carrying raw scriptPubKeys to relay and mine
+  
+  ```bash
+  bitcoind -datacarriersize=83
+  ```
+</ParamField>
+
+## Notification Options
+
+<ParamField path="-blocknotify" type="string">
+  Execute command when the best block changes. %s in cmd is replaced by block hash.
+  
+  ```bash
+  bitcoind -blocknotify="/usr/local/bin/notify-block.sh %s"
+  ```
+</ParamField>
+
+<ParamField path="-alertnotify" type="string">
+  Execute command when an alert is raised. %s in cmd is replaced by message.
+  
+  ```bash
+  bitcoind -alertnotify="echo %s | mail -s 'Bitcoin Alert' admin@example.com"
+  ```
+</ParamField>
+
+<ParamField path="-startupnotify" type="string">
+  Execute command on startup
+  
+  ```bash
+  bitcoind -startupnotify="/usr/local/bin/startup.sh"
+  ```
+</ParamField>
+
+<ParamField path="-shutdownnotify" type="string">
+  Execute command immediately before beginning shutdown
+  
+  ```bash
+  bitcoind -shutdownnotify="/usr/local/bin/shutdown.sh"
+  ```
+</ParamField>
+
+## ZeroMQ Options
+
+<Accordion title="ZeroMQ Publishing Options">
+  <ParamField path="-zmqpubhashblock" type="string">
+    Enable publish hash block in specified address
+    
+    ```bash
+    bitcoind -zmqpubhashblock=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="-zmqpubhashtx" type="string">
+    Enable publish hash transaction in specified address
+    
+    
+    ```bash
+    bitcoind -zmqpubhashtx=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="-zmqpubrawblock" type="string">
+    Enable publish raw block in specified address
+    
+    ```bash
+    bitcoind -zmqpubrawblock=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="-zmqpubrawtx" type="string">
+    Enable publish raw transaction in specified address
+    
+    ```bash
+    bitcoind -zmqpubrawtx=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="-zmqpubsequence" type="string">
+    Enable publish hash block and tx sequence in specified address
+    
+    ```bash
+    bitcoind -zmqpubsequence=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+</Accordion>
+
+## Debugging and Testing Options
+
+<Accordion title="Debug Options">
+  <ParamField path="-debug" type="string">
+    Output debugging information. Can be specified multiple times. Categories: `net`, `tor`, `mempool`, `http`, `bench`, `zmq`, `walletdb`, `rpc`, `estimatefee`, `addrman`, `selectcoins`, `reindex`, `cmpctblock`, `rand`, `prune`, `proxy`, `mempoolrej`, `libevent`, `coindb`, `qt`, `leveldb`, `validation`, `i2p`, `ipc`
+    
+    ```bash
+    bitcoind -debug=net -debug=mempool
+    ```
+  </ParamField>
+  
+  <ParamField path="-debugexclude" type="string">
+    Exclude debugging information for a category. Can be negated to exclude all debugging.
+    
+    ```bash
+    bitcoind -debugexclude=libevent
+    ```
+  </ParamField>
+  
+  <ParamField path="-logips" type="boolean" default="0">
+    Include IP addresses in debug output
+    
+    ```bash
+    bitcoind -logips=1
+    ```
+  </ParamField>
+  
+  <ParamField path="-logtimestamps" type="boolean" default="1">
+    Prepend debug output with timestamp
+    
+    ```bash
+    bitcoind -logtimestamps=1
+    ```
+  </ParamField>
+  
+  <ParamField path="-printtoconsole" type="flag">
+    Send trace/debug info to console instead of debug.log
+    
+    ```bash
+    bitcoind -printtoconsole
+    ```
+  </ParamField>
+  
+  <ParamField path="-shrinkdebugfile" type="flag">
+    Shrink debug.log file on client startup
+    
+    ```bash
+    bitcoind -shrinkdebugfile
+    ```
+  </ParamField>
+  
+  <ParamField path="-uacomment" type="string">
+    Append comment to the user agent string
+    
+    ```bash
+    bitcoind -uacomment="my custom node"
+    ```
+  </ParamField>
+</Accordion>
+
+## Daemon Options (Unix only)
+
+<ParamField path="-daemon" type="flag" default="0">
+  Run in the background as a daemon and accept commands
+  
+  ```bash
+  bitcoind -daemon
+  ```
+</ParamField>
+
+<ParamField path="-daemonwait" type="flag" default="0">
+  Wait for initialization to be finished before exiting. Implies `-daemon`.
+  
+  ```bash
+  bitcoind -daemonwait
+  ```
+</ParamField>
+
+## Example Usage
+
+### Start a Full Node with RPC
+
+```bash
+bitcoind -daemon -server -rpcuser=myuser -rpcpassword=mypass -rpcallowip=127.0.0.1
+```
+
+### Start a Pruned Node
+
+```bash
+bitcoind -daemon -prune=10000 -dbcache=1024
+```
+
+### Start Testnet Node
+
+```bash
+bitcoind -testnet -daemon -server -rpcport=18332
+```
+
+### Start with Custom Data Directory
+
+```bash
+bitcoind -datadir=/mnt/bitcoin -daemon
+```
+
+### Connect to Specific Peers Only
+
+```bash
+bitcoind -connect=192.168.1.100 -connect=192.168.1.101
+```
+
+## Notes
+
+<Note>
+  All command-line options (except `-?`, `-help`, `-version`, and `-conf`) may be specified in the configuration file.
+</Note>
+
+<Warning>
+  Command-line options override values set in the configuration file.
+</Warning>
+
+## See Also
+
+- [bitcoin.conf Configuration File](/configuration/bitcoin-conf) - Configuration file format and options
+- [Data Directory Structure](/configuration/data-directory) - File and directory layout

@@ -1,0 +1,332 @@
+---
+title: Migrating to Descriptor Wallets
+description: How to migrate legacy wallets to modern descriptor wallets
+---
+
+Legacy wallets can be migrated to descriptor wallets using the `migratewallet` RPC command. This process converts your existing wallet to use the modern descriptor format, enabling better organization, security, and compatibility with current features.
+
+## Why Migrate?
+
+Migrating legacy wallets to descriptor wallets provides several benefits:
+
+- **Better organization**: Clear separation between different script types and purposes
+- **Improved compatibility**: Better support for hardware wallets and external signers
+- **Access to new features**: Native support for Taproot and other modern script types
+- **Standardized derivation**: Uses BIP 44, 49, 84, and 86 standard derivation paths
+- **Future-proof**: Descriptor wallets receive active development and new features
+
+<Warning>
+Legacy wallets are deprecated. While still supported, new features and improvements focus on descriptor wallets. Migrate when possible to take advantage of modern Bitcoin Core capabilities.
+</Warning>
+
+## Before Migration
+
+### Create a Backup
+
+<Warning>
+CRITICAL: Always create a backup before migration. While migration creates an automatic backup, having your own backup provides an additional safety layer.
+</Warning>
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" backupwallet /secure/location/pre-migration-backup.dat
+```
+
+### Verify Wallet State
+
+Check your wallet information before migration:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" getwalletinfo
+```
+
+Note:
+- Current balance
+- Number of transactions
+- Whether the wallet is encrypted
+- HD seed status
+
+## Migration Process
+
+The `migratewallet` RPC command handles the entire migration process:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" migratewallet
+```
+
+### What Happens During Migration
+
+<Steps>
+  <Step title="Automatic Backup Created">
+    Bitcoin Core creates a backup of your original legacy wallet at `<wallet-name>-<timestamp>.legacy.bak` in the wallet directory.
+  </Step>
+  
+  <Step title="Descriptor Wallet Created">
+    A new descriptor wallet with the same name as your legacy wallet is created.
+  </Step>
+  
+  <Step title="Keys and Scripts Migrated">
+    All private keys and addresses from the legacy wallet are added to the new descriptor wallet using standard BIP derivation paths.
+  </Step>
+  
+  <Step title="Additional Wallets Created (If Needed)">
+    Depending on your legacy wallet contents:
+    - `<name>_watchonly`: Created if the legacy wallet contains watch-only scripts
+    - `<name>_solvables`: Created if the wallet knows scripts without watching their P2(W)SH equivalents
+  </Step>
+</Steps>
+
+## Migration Results
+
+After migration, you may have up to three new wallets:
+
+### Primary Descriptor Wallet
+
+The main wallet with the same name as your legacy wallet:
+- Contains all your private keys
+- Uses standard BIP 44/49/84/86 derivation paths
+- Generates addresses using descriptor specifications
+
+### Watch-Only Wallet (if applicable)
+
+`<wallet-name>_watchonly`:
+- Contains all watch-only scripts from the legacy wallet
+- Descriptor wallets separate watch-only from private keys
+- Created only if legacy wallet had watch-only scripts
+
+### Solvables Wallet (if applicable)
+
+`<wallet-name>_solvables`:
+- Contains scripts the wallet knows about but doesn't watch the corresponding P2(W)SH versions
+- Relatively rare, only for specific legacy wallet configurations
+
+### Watch-Only-Only Migration
+
+If your legacy wallet contained only watch-only scripts with no private keys:
+- Only the `<name>_watchonly` wallet is created
+- The main descriptor wallet is not created
+- The watch-only descriptor wallet will not have private keys enabled
+
+## After Migration
+
+### Verify Migration Success
+
+Check that all wallets were created successfully:
+
+```bash
+bitcoin-cli listwallets
+```
+
+Verify the main migrated wallet:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" getwalletinfo
+```
+
+Confirm:
+- `"format": "sqlite"` (descriptor wallets use SQLite)
+- Balance matches pre-migration balance
+- Transaction count is preserved
+
+### Create New Backups
+
+<Warning>
+Migrated wallets use different derivation paths than legacy wallets. You MUST create new backups after migration.
+</Warning>
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" backupwallet /secure/location/post-migration-backup.dat
+```
+
+If watch-only or solvables wallets were created, back them up too:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet_watchonly" backupwallet /secure/location/watchonly-backup.dat
+bitcoin-cli -rpcwallet="legacy-wallet_solvables" backupwallet /secure/location/solvables-backup.dat
+```
+
+### Verify Address Generation
+
+Generate a new address and verify it works:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" getnewaddress
+```
+
+### List Descriptors
+
+View the descriptors now managing your wallet:
+
+```bash
+bitcoin-cli -rpcwallet="legacy-wallet" listdescriptors
+```
+
+You'll see separate descriptors for:
+- P2PKH (BIP 44) - Legacy addresses
+- P2SH-P2WPKH (BIP 49) - Nested SegWit
+- P2WPKH (BIP 84) - Native SegWit
+- P2TR (BIP 86) - Taproot
+
+Each with separate receiving (external) and change (internal) descriptors.
+
+## Derivation Path Changes
+
+<Warning>
+Migrated wallets generate new addresses using standard BIP derivation paths, which differ from legacy wallet derivation. Your existing addresses remain valid and accessible, but new addresses follow the new paths.
+</Warning>
+
+Standard derivation paths used after migration:
+
+| Address Type | BIP | Derivation Path |
+|-------------|-----|----------------|
+| P2PKH (Legacy) | 44 | m/44'/0'/0' |
+| P2SH-P2WPKH (Nested SegWit) | 49 | m/49'/0'/0' |
+| P2WPKH (Native SegWit) | 84 | m/84'/0'/0' |
+| P2TR (Taproot) | 86 | m/86'/0'/0' |
+
+## Restoring Legacy Backup
+
+If migration fails or produces unexpected results, restore from the automatic backup:
+
+### Automatic Backup Location
+
+The automatic backup is saved in your wallet directory:
+
+```
+<wallet-directory>/<wallet-name>-<timestamp>.legacy.bak
+```
+
+For example:
+```
+~/.bitcoin/wallets/wallet-01-20260303120000.legacy.bak
+```
+
+### Restoration Process
+
+<Steps>
+  <Step title="Unload Migrated Wallet">
+    ```bash
+    bitcoin-cli unloadwallet "legacy-wallet"
+    ```
+  </Step>
+  
+  <Step title="Restore from Backup">
+    ```bash
+    bitcoin-cli restorewallet "legacy-wallet" "/path/to/wallet-01-<timestamp>.legacy.bak"
+    ```
+  </Step>
+  
+  <Step title="Verify Restoration">
+    ```bash
+    bitcoin-cli -rpcwallet="legacy-wallet" getwalletinfo
+    ```
+  </Step>
+</Steps>
+
+## Migration Edge Cases
+
+### Complex Script Configurations
+
+<Warning>
+Legacy wallets can have extremely complex script configurations. The `migratewallet` command makes a best-effort attempt to capture all scripts, but some unusual configurations might not migrate perfectly.
+</Warning>
+
+If migration fails unexpectedly or seems incomplete:
+1. Restore from backup
+2. Document your specific wallet configuration
+3. Report the issue on GitHub with details
+4. Consider manual migration for complex cases
+
+### Encrypted Wallets
+
+Migration works with encrypted wallets:
+- The passphrase remains the same
+- The new descriptor wallet uses the same encryption
+- You'll still need the passphrase for private key operations
+
+### Large Wallets
+
+Migration of very large wallets (many keys/transactions) may take time:
+- Be patient and allow the process to complete
+- Don't interrupt the migration process
+- The wallet remains accessible after migration
+
+## Best Practices
+
+### Testing Migration
+
+For important wallets, consider testing migration first:
+
+<Steps>
+  <Step title="Create Test Backup">
+    Backup your legacy wallet to a test location.
+  </Step>
+  
+  <Step title="Restore to Test Wallet">
+    Restore the backup as a different wallet name.
+  </Step>
+  
+  <Step title="Migrate Test Wallet">
+    Run migration on the test wallet to verify the process.
+  </Step>
+  
+  <Step title="Verify Results">
+    Check balances, addresses, and functionality before migrating your production wallet.
+  </Step>
+</Steps>
+
+### Post-Migration Workflow
+
+1. **Keep legacy backup**: Retain the automatic backup for at least several months
+2. **Create new backups**: Backup all new descriptor wallets immediately
+3. **Test transactions**: Send a small test transaction to verify functionality
+4. **Update documentation**: Note that you're now using descriptor wallets
+5. **Monitor addresses**: Verify that address generation works as expected
+
+## Migration Checklist
+
+Before migrating:
+- [ ] Create manual backup of legacy wallet
+- [ ] Verify current wallet balance and state
+- [ ] Ensure Bitcoin Core is fully synced
+- [ ] Note current wallet passphrase (if encrypted)
+- [ ] Have sufficient disk space for new wallets
+
+During migration:
+- [ ] Run `migratewallet` command
+- [ ] Wait for process to complete
+- [ ] Note any additional wallets created
+
+After migration:
+- [ ] Verify migration success with `getwalletinfo`
+- [ ] Check that balance matches pre-migration
+- [ ] Create new backups of all descriptor wallets
+- [ ] Test address generation
+- [ ] Verify transaction history is intact
+- [ ] Store legacy backup in secure location
+
+## Troubleshooting
+
+### Migration Fails
+
+If migration fails:
+1. Check error message for specific issues
+2. Verify wallet is not corrupted
+3. Ensure Bitcoin Core is updated to a recent version
+4. Try restarting Bitcoin Core and retrying
+5. Report unexpected failures on GitHub
+
+### Missing Funds After Migration
+
+If funds appear missing:
+1. Check all created wallets (main, watchonly, solvables)
+2. Wait for blockchain rescan to complete
+3. Verify transaction history is present
+4. Restore from backup if issues persist
+
+### Cannot Generate Addresses
+
+If address generation fails:
+1. Check that wallet is not watch-only unintentionally
+2. Verify wallet is unlocked (if encrypted)
+3. Use `listdescriptors` to confirm descriptors are present
+4. Check for error messages indicating specific issues

@@ -1,0 +1,409 @@
+---
+title: "Transaction Structure and Lifecycle"
+description: "Understanding Bitcoin transaction anatomy, validation, and propagation through the network"
+---
+
+## Overview
+
+Bitcoin transactions are the fundamental units of value transfer in the Bitcoin network. Each transaction consumes previous outputs (inputs) and creates new outputs, forming a directed acyclic graph of value flow. Understanding transaction structure and lifecycle is essential for working with Bitcoin Core.
+
+## Transaction Structure
+
+### Core Components
+
+Every Bitcoin transaction contains:
+
+```cpp
+class CTransaction {
+    int32_t nVersion;              // Transaction version
+    std::vector<CTxIn> vin;        // Inputs
+    std::vector<CTxOut> vout;      // Outputs  
+    uint32_t nLockTime;            // Lock time
+};
+```
+
+### Version Field
+
+- **Version 1**: Original transaction format
+- **Version 2**: Enables BIP 68 relative timelocks via nSequence
+- Future versions may introduce new features
+
+### Transaction Identifiers
+
+Transactions have two identifiers:
+
+**TXID (Transaction ID)**:
+- SHA256(SHA256(transaction without witness))
+- Used for referencing outputs in inputs
+- Remains constant even if witness data changes
+
+**WTXID (Witness Transaction ID)**:
+- SHA256(SHA256(transaction with witness))
+- Used in witness commitment
+- Includes witness data in hash
+
+<Note>
+The separation of TXID and WTXID solves transaction malleability for SegWit transactions. Legacy transactions have identical TXID and WTXID.
+</Note>
+
+## Transaction Inputs
+
+### Input Structure
+
+```cpp
+class CTxIn {
+    COutPoint prevout;           // Previous output reference
+    CScript scriptSig;           // Signature script
+    uint32_t nSequence;          // Sequence number
+    CScriptWitness scriptWitness; // Witness data (SegWit)
+};
+```
+
+### Outpoint (Previous Output Reference)
+
+Each input references a previous output:
+
+```cpp
+class COutPoint {
+    Txid hash;      // Transaction hash containing the output
+    uint32_t n;     // Output index (vout position)
+};
+```
+
+- **Coinbase inputs**: Special case with hash = 0x00...00 and n = 0xFFFFFFFF
+- **Standard inputs**: Reference specific outputs from previous transactions
+
+### ScriptSig (Signature Script)
+
+The scriptSig provides data to satisfy the scriptPubKey:
+
+- For **P2PKH**: `<signature> <pubkey>`
+- For **P2SH**: `<data> <redeemScript>`
+- For **SegWit**: Typically empty (data in witness)
+
+### Sequence Number (nSequence)
+
+Multi-purpose field with several meanings:
+
+<CodeGroup>
+```cpp Sequence Constants
+SEQUENCE_FINAL = 0xFFFFFFFF              // Disable nLockTime
+SEQUENCE_LOCKTIME_DISABLE_FLAG = 1 << 31 // Disable relative locktime
+SEQUENCE_LOCKTIME_TYPE_FLAG = 1 << 22    // Time vs blocks
+SEQUENCE_LOCKTIME_MASK = 0x0000FFFF      // Extract locktime value
+```
+</CodeGroup>
+
+**Original purpose**: Enable transaction replacement (RBF)
+
+**BIP 68 (version 2+)**: Relative lock-time
+- If disable flag not set and version ≥ 2:
+  - Type flag clear: Relative blocks (0-65535)
+  - Type flag set: Relative time (× 512 seconds)
+
+**BIP 125**: Replace-by-Fee signaling
+- nSequence < 0xFFFFFFFE signals RBF
+
+### Witness Data
+
+SegWit transactions move signature data to witness:
+
+- **P2WPKH witness**: `<signature> <pubkey>`
+- **P2WSH witness**: `<item1> <item2> ... <witnessScript>`
+- **P2TR witness**: `<signature>` or script path data
+
+Witness data is not included in TXID calculation, preventing malleability.
+
+## Transaction Outputs
+
+### Output Structure
+
+```cpp
+class CTxOut {
+    CAmount nValue;         // Value in satoshis
+    CScript scriptPubKey;   // Locking script
+};
+```
+
+### Value (nValue)
+
+- Denominated in **satoshis** (1 BTC = 100,000,000 satoshis)
+- Must be non-negative
+- Maximum: 21,000,000 BTC (2,100,000,000,000,000 satoshis)
+- Consensus enforced: sum of outputs ≤ sum of inputs (+ block subsidy for coinbase)
+
+### ScriptPubKey (Locking Script)
+
+Defines spending conditions:
+
+**P2PKH (Pay-to-PubKey-Hash)**:
+```
+OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+```
+
+**P2SH (Pay-to-Script-Hash)**:
+```
+OP_HASH160 <scriptHash> OP_EQUAL
+```
+
+**P2WPKH (Witness PubKey Hash)**:
+```
+OP_0 <20-byte-pubkey-hash>
+```
+
+**P2WSH (Witness Script Hash)**:
+```
+OP_0 <32-byte-script-hash>
+```
+
+**P2TR (Taproot)**:
+```
+OP_1 <32-byte-taproot-output>
+```
+
+<Info>
+Taproot outputs look indistinguishable from each other, improving privacy. The spending path (key path vs script path) is only revealed when spent.
+</Info>
+
+## Lock Time (nLockTime)
+
+Transaction-level timelock:
+
+- **Value < 500,000,000**: Block height
+- **Value ≥ 500,000,000**: Unix timestamp
+- Transaction invalid before specified time/height
+- Disabled if all inputs have nSequence = 0xFFFFFFFF
+
+## Transaction Weight and Size
+
+### Weight Calculation
+
+```cpp
+weight = (base_size × 3) + total_size
+```
+
+Where:
+- **base_size**: Size without witness data
+- **total_size**: Size with witness data
+
+### Size Metrics
+
+**Virtual Size (vsize)**:
+```
+vsize = weight / 4
+```
+
+Used for:
+- Fee rate calculation (sat/vByte)
+- Block space accounting
+- Mempool size limits
+
+**Base Size**: Legacy transaction size
+
+**Total Size**: Including witness data
+
+<Tip>
+SegWit transactions have lower vsize than base size, reducing fees while maintaining security.
+</Tip>
+
+## Transaction Lifecycle
+
+### 1. Creation
+
+Transaction creation process:
+
+1. **Select inputs**: Choose UTXOs to spend (coin selection)
+2. **Create outputs**: Recipient addresses and amounts
+3. **Add change output**: Return excess to sender
+4. **Calculate fee**: Fee = sum(inputs) - sum(outputs)
+5. **Sign inputs**: Create scriptSig/witness data
+
+### 2. Validation
+
+Before accepting to mempool, nodes validate:
+
+**Consensus checks**:
+- Inputs exist and are unspent
+- No double-spends
+- Scripts execute successfully
+- Signatures are valid
+- Timelocks satisfied
+
+**Policy checks** (mempool-specific):
+- Minimum fee rate
+- Maximum transaction size
+- Standard script types
+- Dust outputs avoided
+- RBF rules respected
+
+### 3. Mempool Entry
+
+Valid transactions enter the mempool:
+
+```cpp
+static const uint32_t MEMPOOL_HEIGHT = 0x7FFFFFFF;
+```
+
+- Stored in memory with metadata
+- Tracked by TXID and WTXID
+- Indexed for efficient lookup
+- Subject to eviction if mempool is full
+
+### Mempool Organization
+
+The mempool tracks:
+
+- **Parent-child relationships**: Transaction dependencies
+- **Fee rates**: For mining prioritization
+- **Entry time**: For CPFP and package evaluation
+- **Conflicts**: For RBF replacement
+
+<Note>
+Bitcoin Core's mempool uses a sophisticated graph structure (TxGraph) to optimize transaction linearization for mining.
+</Note>
+
+### 4. Propagation
+
+Transactions propagate through the network:
+
+1. Node validates transaction
+2. Announces to peers via `inv` message (TXID or WTXID)
+3. Peers request with `getdata` if not already known
+4. Transaction sent via `tx` message
+5. Process repeats at each peer
+
+**Propagation optimizations**:
+- Bloom filters (SPV clients)
+- Compact block relay
+- Transaction packages (CPFP)
+
+### 5. Mining
+
+Miners select transactions for blocks:
+
+**Selection criteria**:
+- Fee rate (sat/vByte)
+- Ancestor/descendant relationships (CPFP)
+- Transaction dependencies
+
+**Block template construction**:
+1. Start with coinbase transaction
+2. Add highest fee rate transactions
+3. Respect block weight limit (4M weight units)
+4. Ensure all dependencies included
+5. Calculate merkle root
+
+### 6. Confirmation
+
+Once included in a block:
+
+1. **0 confirmations**: In valid block, not yet buried
+2. **1 confirmation**: One block on top
+3. **6 confirmations**: Standard for large transactions (recommended)
+4. **100 confirmations**: Coinbase maturity, deep reorg protection
+
+<Warning>
+0-confirmation transactions can be reversed via double-spend or reorg. Always wait for sufficient confirmations for important transactions.
+</Warning>
+
+## Special Transaction Types
+
+### Coinbase Transactions
+
+First transaction in every block:
+
+- No real inputs (null outpoint)
+- Input scriptSig: block height + arbitrary data
+- Output value: block subsidy + fees
+- Must mature 100 blocks before spending
+
+### OP_RETURN Transactions
+
+Data storage on blockchain:
+
+```
+OP_RETURN <data>
+```
+
+- Provably unspendable
+- Up to 80 bytes standard policy
+- Used for timestamps, commitments, protocols
+
+## Transaction Fees
+
+### Fee Calculation
+
+```
+fee = sum(input_values) - sum(output_values)
+```
+
+- Not explicitly specified in transaction
+- Implied by input/output difference
+- Claimed by miner in coinbase
+
+### Fee Rate
+
+```
+fee_rate = fee / vsize  (sat/vByte)
+```
+
+**Typical fee rates**:
+- Low priority: 1-3 sat/vByte
+- Medium priority: 5-20 sat/vByte  
+- High priority: 20+ sat/vByte
+
+<Info>
+Bitcoin Core estimates fees based on recent block inclusion rates. The `estimatesmartfee` RPC provides fee rate recommendations.
+</Info>
+
+### Fee Bumping Mechanisms
+
+**Replace-By-Fee (RBF - BIP 125)**:
+- Replace unconfirmed transaction with higher fee version
+- Requires original transaction to signal RBF
+- Must increase fee by minimum increment
+
+**Child-Pays-For-Parent (CPFP)**:
+- Spend unconfirmed output with high fee
+- Miners consider package fee rate
+- No cooperation from original sender needed
+
+## Transaction Malleability
+
+### Pre-SegWit Malleability
+
+Third parties could modify:
+- Signature encoding (ECDSA malleability)
+- ScriptSig structure
+- This changed TXID, breaking dependent transactions
+
+### SegWit Fix
+
+Segregated Witness solves malleability:
+
+1. Witness data separated from transaction
+2. TXID computed without witness
+3. Witness data committed separately
+4. Third parties cannot change TXID
+
+<Note>
+SegWit makes payment channels (Lightning Network) and other Layer 2 solutions practical by eliminating malleability risks.
+</Note>
+
+## Transaction Relay Policy
+
+Bitcoin Core enforces standard transaction rules:
+
+- Minimum relay fee: 1 sat/vByte (configurable)
+- Maximum size: 400,000 weight units
+- Maximum sigops: 16,000
+- Dust threshold: 546 satoshis for P2WPKH
+- Version: 1 or 2 (higher versions non-standard)
+
+These are **policy rules**, not consensus rules - miners may include non-standard transactions.
+
+## Related Concepts
+
+- [Consensus Rules](/concepts/consensus) - Transaction validation rules
+- [Wallets](/concepts/wallets) - Creating and signing transactions
+- [Blockchain](/concepts/blockchain) - How transactions are stored in blocks

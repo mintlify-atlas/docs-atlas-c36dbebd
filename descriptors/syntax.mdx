@@ -1,0 +1,275 @@
+---
+title: Descriptor Syntax Reference
+description: Complete reference for Bitcoin Core output descriptor syntax and format
+---
+
+## Basic Structure
+
+Descriptors consist of expressions with an optional checksum:
+
+```
+SCRIPT#CHECKSUM
+```
+
+Where `CHECKSUM` is an 8-character alphanumeric descriptor checksum that protects against typos.
+
+## SCRIPT Expressions
+
+<Accordion title="sh() - Pay-to-Script-Hash">
+**Usage:** `sh(SCRIPT)` (top level only)
+
+Creates a P2SH output that embeds the argument script.
+
+```bash
+sh(wpkh(03fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556))
+```
+
+Nesting example:
+```bash
+sh(wsh(pkh(02e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13)))
+```
+</Accordion>
+
+<Accordion title="wsh() - Pay-to-Witness-Script-Hash">
+**Usage:** `wsh(SCRIPT)` (top level or inside `sh` only)
+
+Creates a P2WSH output that embeds the argument script.
+
+```bash
+wsh(multi(2,03a0434d9e47f3c86235477c7b1ae6ae5d3442d49b1943c2b752a68e2a47e247c7,03774ae7f858a9411e5ef4246b70c65aac5649980be5c17891bbec17895da008cb))
+```
+</Accordion>
+
+<Accordion title="pk() - Pay-to-Pubkey">
+**Usage:** `pk(KEY)` (anywhere)
+
+Creates a P2PK output for the given public key.
+
+```bash
+pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)
+```
+</Accordion>
+
+<Accordion title="pkh() - Pay-to-Pubkey-Hash">
+**Usage:** `pkh(KEY)` (not inside `tr`)
+
+Creates a P2PKH output for the given public key.
+
+```bash
+pkh(02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)
+```
+</Accordion>
+
+<Accordion title="wpkh() - Pay-to-Witness-Pubkey-Hash">
+**Usage:** `wpkh(KEY)` (top level or inside `sh` only)
+
+Creates a P2WPKH output for the given compressed pubkey.
+
+```bash
+wpkh(02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9)
+```
+</Accordion>
+
+<Accordion title="combo() - Legacy Compatibility">
+**Usage:** `combo(KEY)` (top level only)
+
+Alias for `pk(KEY)` and `pkh(KEY)`. If the key is compressed, also includes `wpkh(KEY)` and `sh(wpkh(KEY))`.
+
+```bash
+combo(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)
+```
+</Accordion>
+
+<Accordion title="multi() / sortedmulti() - Multisig">
+**Usage:** `multi(k,KEY_1,KEY_2,...,KEY_n)` (not inside `tr`)
+
+k-of-n multisig using OP_CHECKMULTISIG. Use `sortedmulti` for lexicographically sorted keys.
+
+```bash
+multi(2,022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01,03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe)
+```
+
+```bash
+sortedmulti(2,03acd484e2f0c7f65309ad178a9f559abde09796974c57e714c35f110dfc27ccbe,022f01e5e15cca351daff3843fb70f3c2f0a1bdd05e5af888a67784ef3e10a2a01)
+```
+</Accordion>
+
+<Accordion title="multi_a() / sortedmulti_a() - Taproot Multisig">
+**Usage:** `multi_a(k,KEY_1,KEY_2,...,KEY_N)` (only inside `tr`)
+
+k-of-n multisig using OP_CHECKSIG, OP_CHECKSIGADD, and OP_NUMEQUAL for Taproot.
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,sortedmulti_a(2,2f8bde4d1a07209355b4a7250a5c5128e88b84bddc619ab7cba8d569b240efe4,5cbdf0646e5db4eaa398f365f2ea7a0e3d419b7e0330e39ce92bddedcac4f9bc))
+```
+</Accordion>
+
+<Accordion title="tr() - Pay-to-Taproot">
+**Usage:** `tr(KEY)` or `tr(KEY,TREE)` (top level only)
+
+P2TR output with the specified key as internal key, and optionally a tree of script paths.
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)
+```
+
+With script paths:
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5,{pk(fff97bd5755eeea420453a14355235d382f6472f8568a18b2f057a1460297556),pk(e493dbf1c10d80f3581e4904930b1404cc6c13900ee0758474fa94abe8c4cd13)})
+```
+</Accordion>
+
+<Accordion title="addr() - Address Reference">
+**Usage:** `addr(ADDR)` (top level only)
+
+Expands to the script that the given address represents.
+
+```bash
+addr(1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa)
+```
+</Accordion>
+
+<Accordion title="raw() - Raw Script">
+**Usage:** `raw(HEX)` (top level only)
+
+Uses the script whose hex encoding is HEX.
+
+```bash
+raw(6a)
+```
+</Accordion>
+
+## KEY Expressions
+
+KEY expressions can include optional key origin information and support multiple formats.
+
+### Key Origin Information
+
+Format: `[fingerprint/path]KEY`
+
+```bash
+[d34db33f/44'/0'/0']xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL
+```
+
+Components:
+- `[` - Opening bracket
+- `d34db33f` - 8 hex character fingerprint (first 32 bits of Hash160 of master pubkey)
+- `/44'/0'/0'` - Derivation path (unhardened or hardened steps)
+- `]` - Closing bracket
+
+### Supported Key Formats
+
+<Accordion title="Hex-Encoded Public Keys">
+**Compressed:** 66 characters starting with `02` or `03`
+
+```bash
+pk(0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798)
+```
+
+**Uncompressed:** 130 characters starting with `04`
+
+**x-only (Taproot):** 64 hex characters (inside `tr` and `rawtr` only)
+
+```bash
+tr(c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5)
+```
+
+**Note:** Only compressed keys are permitted inside `wpkh` and `wsh`.
+</Accordion>
+
+<Accordion title="WIF Private Keys">
+WIF-encoded private keys can be specified instead of public keys.
+
+```bash
+pkh(L1uyy5qTuGrVXrmrsvHWHgVzW9kKdrp27wBC7Vs6nZDTF2BRUVwy)
+```
+</Accordion>
+
+<Accordion title="Extended Keys (xpub/xprv)">
+BIP32 extended public or private keys with optional derivation paths.
+
+**Basic xpub:**
+```bash
+pk(xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8)
+```
+
+**With derivation path:**
+```bash
+pkh(xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw/1/2)
+```
+
+**With wildcard:**
+```bash
+pkh(xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw/1/*)
+```
+
+**Derivation path syntax:**
+- `/NUM` - Unhardened derivation
+- `/NUM'` or `/NUM h` - Hardened derivation
+- `/*` - All unhardened children (default range: 0-1000)
+- `/*'` or `/*h` - All hardened children
+
+**Note:** Hardened derivation requires access to the private key.
+</Accordion>
+
+## Multipath Descriptors
+
+Specify receiving and change paths in a single descriptor using tuple notation:
+
+```bash
+wpkh(xpub.../0/*)
+```
+
+Receiving and change in one descriptor:
+```bash
+wpkh(xpub.../<0;1>/*)
+```
+
+This expands to two descriptors:
+- `wpkh(xpub.../0/*)` - Receiving addresses
+- `wpkh(xpub.../1/*)` - Change addresses
+
+## TREE Expressions
+
+For Taproot script trees inside `tr()`:
+
+**Single script:**
+```bash
+tr(KEY,SCRIPT)
+```
+
+**Multiple scripts:**
+```bash
+tr(KEY,{SCRIPT1,SCRIPT2})
+```
+
+**Nested trees:**
+```bash
+tr(KEY,{SCRIPT1,{SCRIPT2,SCRIPT3}})
+```
+
+## Checksums
+
+Descriptors should include an 8-character checksum for error detection:
+
+```bash
+wpkh(02f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9)#8zl0zxz0
+```
+
+**Checksum properties:**
+- Detects up to 4 character substitution errors (descriptors ≤ 501 chars)
+- Detects up to 3 errors in longer descriptors
+- ~1 in trillion false negative rate for other error types
+
+**Generate checksums:**
+```bash
+bitcoin-cli getdescriptorinfo "wpkh(xpub...)"
+```
+
+## Address Types
+
+Supported address formats for `addr()` expressions:
+
+- **P2PKH:** `1...` (mainnet) or `[nm]...` (testnet)
+- **P2SH:** `3...` (mainnet) or `2...` (testnet)
+- **Segwit:** `bc1...` (mainnet) or `tb1...` (testnet) - bech32/bech32m format

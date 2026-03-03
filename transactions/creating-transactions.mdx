@@ -1,0 +1,173 @@
+---
+title: Creating and Sending Transactions
+description: Learn how to create, fund, and broadcast Bitcoin transactions using Bitcoin Core RPC commands
+---
+
+Bitcoin Core provides several RPC commands for creating and sending transactions. This guide covers the most common workflows for both single-signature and watch-only wallets.
+
+## Basic Transaction Creation
+
+The simplest way to send bitcoin is using the `send` RPC command:
+
+```bash
+bitcoin-cli send '{"address": 0.01}'
+```
+
+This command automatically:
+- Selects appropriate UTXOs
+- Calculates the transaction fee
+- Creates a change output
+- Signs and broadcasts the transaction
+
+## Manual Transaction Workflow
+
+For more control over transaction creation, use the lower-level RPCs:
+
+<Steps>
+  <Step title="Create a raw transaction">
+    Use `createrawtransaction` to specify inputs and outputs manually:
+
+    ```bash
+    bitcoin-cli createrawtransaction \
+      '[{"txid":"txid_here","vout":0}]' \
+      '{"receiving_address":0.01}'
+    ```
+  </Step>
+
+  <Step title="Fund the transaction">
+    Use `fundrawtransaction` to add inputs and change output:
+
+    ```bash
+    bitcoin-cli fundrawtransaction "raw_transaction_hex"
+    ```
+
+    This returns a funded transaction hex and fee information.
+  </Step>
+
+  <Step title="Sign the transaction">
+    Use `signrawtransactionwithwallet` to add signatures:
+
+    ```bash
+    bitcoin-cli signrawtransactionwithwallet "funded_transaction_hex"
+    ```
+  </Step>
+
+  <Step title="Broadcast the transaction">
+    Use `sendrawtransaction` to broadcast to the network:
+
+    ```bash
+    bitcoin-cli sendrawtransaction "signed_transaction_hex"
+    ```
+
+    Returns the transaction ID (txid) if successful.
+  </Step>
+</Steps>
+
+## Creating Funded Transactions
+
+The `walletcreatefundedpsbt` RPC combines creation and funding in one step:
+
+```bash
+bitcoin-cli walletcreatefundedpsbt \
+  '[]' \
+  '{"destination_address": 0.01}'
+```
+
+Leaving the inputs array empty allows Bitcoin Core to automatically select UTXOs.
+
+<Warning>
+  Always verify transaction details before broadcasting. Check:
+  - Recipient addresses are correct
+  - Amounts are as intended
+  - Fee is reasonable
+  - Change address belongs to your wallet
+</Warning>
+
+## Transaction Fee Estimation
+
+Estimate appropriate fees using `estimatesmartfee`:
+
+```bash
+bitcoin-cli estimatesmartfee 6
+```
+
+This estimates the fee rate for confirmation within 6 blocks.
+
+## Listing Unspent Outputs
+
+View available UTXOs with `listunspent`:
+
+```bash
+bitcoin-cli listunspent
+```
+
+Filter by minimum confirmations:
+
+```bash
+bitcoin-cli listunspent 1 9999999 '["specific_address"]'
+```
+
+## Watch-Only Wallets
+
+Watch-only wallets can create unsigned transactions but cannot sign them:
+
+```bash
+bitcoin-cli -rpcwallet="watch_only" send \
+  '{"destination": 0.01}'
+```
+
+This returns a PSBT that must be signed by a wallet with the private keys.
+
+<Warning>
+  Never share your private keys or wallet.dat file. For enhanced security, consider using offline signing or hardware wallets for large amounts.
+</Warning>
+
+## Transaction Replacement (RBF)
+
+To enable Replace-By-Fee on a transaction, use the `replaceable` option:
+
+```bash
+bitcoin-cli -named send \
+  outputs='{"address":0.01}' \
+  options='{"replaceable":true}'
+```
+
+Replace an existing transaction with `bumpfee`:
+
+```bash
+bitcoin-cli bumpfee "original_txid"
+```
+
+## Verifying Transactions
+
+Check transaction status with `gettransaction`:
+
+```bash
+bitcoin-cli gettransaction "txid"
+```
+
+View mempool information:
+
+```bash
+bitcoin-cli getmempoolentry "txid"
+```
+
+## Common Options
+
+Most transaction RPCs support these options:
+
+- `conf_target` - Number of blocks for fee estimation
+- `estimate_mode` - Fee estimation mode (ECONOMICAL, CONSERVATIVE)
+- `replaceable` - Enable RBF (Replace-By-Fee)
+- `subtractfeefromamount` - Deduct fee from output amount
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PSBT" icon="file-signature" href="/transactions/psbt">
+    Learn about Partially Signed Bitcoin Transactions
+  </Card>
+  <Card title="Multi-signature" icon="users" href="/transactions/multisig">
+    Create multi-signature wallets and transactions
+  </Card>
+</CardGroup>

@@ -1,0 +1,189 @@
+---
+title: Running Bitcoin Core
+description: Learn how to run bitcoind and bitcoin-qt on different platforms
+---
+
+Bitcoin Core provides multiple ways to run a full node. You can use the graphical interface (bitcoin-qt) or run it as a headless daemon (bitcoind).
+
+## Choosing Your Client
+
+Bitcoin Core offers three main commands:
+
+- **bitcoin-qt** - Full graphical user interface
+- **bitcoind** - Headless daemon for servers and automation
+- **bitcoin** - Wrapper command that supports subcommands like `bitcoin gui`, `bitcoin node`, and `bitcoin rpc`
+
+<Info>
+The `bitcoin` wrapper command provides a unified interface. List all available subcommands with `bitcoin help`.
+</Info>
+
+## Running on Different Platforms
+
+<Tabs>
+  <Tab title="Unix/Linux">
+    Unpack the files into a directory and run:
+
+    ```bash
+    # GUI client
+    bin/bitcoin-qt
+
+    # Headless daemon
+    bin/bitcoind
+
+    # Using the wrapper
+    bin/bitcoin gui
+    bin/bitcoin node
+    ```
+
+    <Steps>
+      <Step title="Extract the archive">
+        ```bash
+        tar -xzf bitcoin-*.tar.gz
+        cd bitcoin-*/
+        ```
+      </Step>
+      
+      <Step title="Run the client">
+        Choose your preferred interface and start Bitcoin Core:
+        ```bash
+        ./bin/bitcoind -daemon
+        ```
+      </Step>
+      
+      <Step title="Verify it's running">
+        Check that the daemon is running:
+        ```bash
+        ./bin/bitcoin-cli getblockchaininfo
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Windows">
+    <Steps>
+      <Step title="Extract files">
+        Unpack the downloaded archive to a directory of your choice.
+      </Step>
+      
+      <Step title="Run Bitcoin Core">
+        Double-click `bitcoin-qt.exe` to launch the graphical interface.
+        
+        For the daemon version, open Command Prompt and run:
+        ```cmd
+        bitcoind.exe
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="macOS">
+    <Steps>
+      <Step title="Install application">
+        Drag Bitcoin Core to your Applications folder.
+      </Step>
+      
+      <Step title="Launch Bitcoin Core">
+        Open Bitcoin Core from your Applications folder or Launchpad.
+      </Step>
+    </Steps>
+    
+    For command-line usage:
+    ```bash
+    /Applications/Bitcoin-Qt.app/Contents/MacOS/Bitcoin-Qt
+    ```
+  </Tab>
+</Tabs>
+
+## First Run Setup
+
+On first launch, Bitcoin Core will:
+
+1. Prompt you to choose a data directory location
+2. Begin downloading and verifying the blockchain
+3. Create a wallet (optional)
+
+<Warning>
+Bitcoin Core downloads and stores the entire blockchain history. This requires several hundred gigabytes of disk space. Make sure you have adequate storage before starting.
+</Warning>
+
+## Common Configuration Options
+
+You can customize Bitcoin Core's behavior using command-line options or a `bitcoin.conf` configuration file.
+
+### Data Directory
+
+Specify where blockchain data is stored:
+
+```bash
+bitcoind -datadir=/path/to/data
+```
+
+### Network Selection
+
+Run on different networks:
+
+```bash
+# Testnet
+bitcoind -testnet
+
+# Signet
+bitcoind -signet
+
+# Regtest (for development)
+bitcoind -regtest
+```
+
+### Daemon Mode
+
+Run bitcoind in the background:
+
+```bash
+bitcoind -daemon
+```
+
+Then interact with it using:
+
+```bash
+bitcoin-cli getblockchaininfo
+bitcoin-cli help
+```
+
+## Stopping Bitcoin Core
+
+Gracefully shut down the node:
+
+```bash
+bitcoin-cli stop
+```
+
+Or from the GUI: File → Exit
+
+<Warning>
+Always shut down Bitcoin Core gracefully. Forced termination may corrupt the database and require reindexing.
+</Warning>
+
+## Getting Help
+
+If you encounter issues:
+
+- **Bitcoin Wiki**: [en.bitcoin.it/wiki](https://en.bitcoin.it/wiki/Main_Page)
+- **Bitcoin StackExchange**: [bitcoin.stackexchange.com](https://bitcoin.stackexchange.com)
+- **IRC**: #bitcoin on Libera Chat ([web.libera.chat](https://web.libera.chat/#bitcoin))
+- **Forums**: [bitcointalk.org](https://bitcointalk.org/) Technical Support board
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Initial Block Download" icon="download" href="/operations/initial-block-download">
+    Understand the IBD process and what to expect
+  </Card>
+  <Card title="Performance Optimization" icon="gauge-high" href="/operations/performance-optimization">
+    Tune your node for better performance
+  </Card>
+  <Card title="Pruning" icon="scissors" href="/operations/pruning">
+    Reduce disk space requirements
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/bitcoin-conf">
+    Learn about bitcoin.conf options
+  </Card>
+</CardGroup>

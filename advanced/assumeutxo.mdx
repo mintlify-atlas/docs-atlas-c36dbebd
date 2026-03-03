@@ -1,0 +1,153 @@
+---
+title: AssumeUTXO
+description: Fast bootstrap your Bitcoin Core node with AssumeUTXO snapshots
+---
+
+AssumeUTXO is a feature that allows fast bootstrapping of a validating Bitcoin Core instance by loading a UTXO set snapshot while continuing to validate the full blockchain in the background.
+
+## What is AssumeUTXO?
+
+AssumeUTXO enables you to start using a fully validating node much faster by:
+
+1. Loading a snapshot of the UTXO set at a specific block height
+2. Immediately syncing from that point forward to the chain tip
+3. Validating the entire blockchain from genesis in the background
+
+This provides the best of both worlds: quick startup time while maintaining full validation security.
+
+## When to Use AssumeUTXO
+
+AssumeUTXO is ideal when:
+
+- You need to get a node operational quickly
+- You want full validation but can't wait days for Initial Block Download (IBD)
+- You're setting up a new node and have access to a trusted snapshot
+- You have limited time but don't want to sacrifice security by using a pruned-only approach
+
+## Loading a Snapshot
+
+Snapshots are verified against hardcoded hashes in the Bitcoin Core source code for security.
+
+### Obtaining a Snapshot
+
+Currently, there is no canonical source for snapshots. You can:
+
+- Download from a trusted source (verify it matches the hardcoded hash)
+- Generate your own using an already-synced node (see [Generating a Snapshot](#generating-a-snapshot))
+
+### Loading the Snapshot
+
+Use the `loadtxoutset` RPC command:
+
+```bash
+bitcoin-cli -rpcclienttimeout=0 loadtxoutset /path/to/snapshot.dat
+```
+
+<Note>
+Set `-rpcclienttimeout=0` to prevent timeout during the loading process, which can take considerable time.
+</Note>
+
+### Monitoring Progress
+
+After loading, monitor both the snapshot chain sync and background IBD:
+
+```bash
+bitcoin-cli getchainstates
+```
+
+This shows the status of both chainstates:
+- The snapshot chainstate (syncing to tip)
+- The background IBD chainstate (validating from genesis)
+
+## Using with Pruning
+
+AssumeUTXO works with pruned nodes:
+
+- Minimum prune setting is normally 550 MiB, but AssumeUTXO requires at least 1100 MiB
+- You can delete the snapshot file immediately after `loadtxoutset` completes to save space
+- Temporarily, two chainstate directories will exist (each multiple gigabytes)
+- Once background validation reaches the snapshot block, the duplicate data is removed
+
+<Warning>
+During background sync, you'll need significantly more disk space as both chainstates exist simultaneously.
+</Warning>
+
+## Working with Indexes
+
+Indexes (transaction index, block filter index, etc.) don't benefit from AssumeUTXO:
+
+- Indexes always build from the genesis block
+- They can only apply blocks in sequential order
+- They continue building once background validation reaches the snapshot block
+
+### Pruning Considerations
+
+For indexes that support pruning:
+- Only already-indexed blocks can be pruned
+- Blocks downloaded after the snapshot can't be pruned until indexed
+- If the snapshot is old, this may consume significant disk space temporarily
+
+## Generating a Snapshot
+
+You can create snapshots from a fully synced node using the `dumptxoutset` RPC:
+
+```bash
+# Create snapshot at current tip
+bitcoin-cli -rpcclienttimeout=0 dumptxoutset /path/to/output.dat latest
+
+# Create snapshot at a specific recent height
+bitcoin-cli -rpcclienttimeout=0 dumptxoutset /path/to/output.dat rollback
+```
+
+<Warning>
+During `dumptxoutset` execution:
+- The node enters a temporary inconsistent state
+- Network activity is disabled and all peers are disconnected
+- Avoid interacting with the node to prevent race conditions
+- The process takes significant time regardless of hardware
+</Warning>
+
+### Verifying Hardcoded Hashes
+
+The "rollback" type can verify hardcoded snapshot hashes:
+
+```bash
+bitcoin-cli -rpcclienttimeout=0 dumptxoutset /path/to/verify.dat rollback
+```
+
+Compare the output hash with the hardcoded value in `chainparams` to verify correctness.
+
+## Using Custom Snapshots
+
+To use a snapshot at a height without a hardcoded hash:
+
+1. Generate the snapshot using `dumptxoutset`
+2. Note the snapshot hash from the output
+3. Modify `chainparams` in the source code to add the hash
+4. Recompile Bitcoin Core
+5. Load the snapshot with the modified binary
+
+<Note>
+This is primarily useful for testing or development. Production nodes should use snapshots with hashes already included in official releases.
+</Note>
+
+## Example Workflow
+
+```bash
+# Start Bitcoin Core
+bitcoind
+
+# In another terminal, load the snapshot
+bitcoin-cli -rpcclienttimeout=0 loadtxoutset /path/to/snapshot.dat
+
+# Monitor sync progress
+bitcoin-cli getchainstates
+
+# Check blockchain info
+bitcoin-cli getblockchaininfo
+
+# Once loaded, the node is immediately usable
+# Background validation continues automatically
+```
+
+After the background validation completes and reaches the snapshot block, Bitcoin Core automatically removes the redundant chainstate, and you have a fully validated node.

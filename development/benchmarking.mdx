@@ -1,0 +1,257 @@
+---
+title: Benchmarking
+description: Performance benchmarking framework and best practices for Bitcoin Core
+---
+
+## Overview
+
+Bitcoin Core includes an internal benchmarking framework for measuring performance of critical components. Benchmarks cover:
+
+- Cryptographic algorithms (SHA1, SHA256, SHA512, RIPEMD160, Poly1305, ChaCha20)
+- Rolling bloom filter
+- Coins selection
+- Thread queue
+- Wallet balance
+- And more
+
+## Building the Benchmark Binary
+
+To compile the benchmark binary:
+
+```bash
+cmake -B build -DBUILD_BENCH=ON
+cmake --build build -t bench_bitcoin
+```
+
+<Note>
+The bench runner will warn if you configure with `-DCMAKE_BUILD_TYPE=Debug`. Consider whether building without debug mode will impact your benchmarks by unlatching log printers and lock analysis.
+</Note>
+
+## Running Benchmarks
+
+Execute all benchmarks:
+
+```bash
+build/bin/bench_bitcoin
+```
+
+### Example Output
+
+```
+|               ns/op |                op/s |    err% |     total | benchmark
+|--------------------:|--------------------:|--------:|----------:|:----------
+|       57,927,463.00 |               17.26 |    3.6% |      0.66 | `AddrManAdd`
+|          677,816.00 |            1,475.33 |    4.9% |      0.01 | `AddrManGetAddr`
+
+...
+
+|             ns/byte |              byte/s |    err% |     total | benchmark
+|--------------------:|--------------------:|--------:|----------:|:----------
+|              127.32 |        7,854,302.69 |    0.3% |      0.00 | `Base58CheckEncode`
+|               31.95 |       31,303,226.99 |    0.2% |      0.00 | `Base58Decode`
+
+...
+```
+
+The output shows:
+- **ns/op**: Nanoseconds per operation
+- **op/s**: Operations per second
+- **err%**: Error percentage (variance)
+- **total**: Total time in seconds
+- **ns/byte**: Nanoseconds per byte (for data processing benchmarks)
+- **byte/s**: Bytes per second throughput
+
+## Benchmark Options
+
+View all available options:
+
+```bash
+build/bin/bench_bitcoin -h
+```
+
+Common options include:
+- Listing benchmarks without running them
+- Using regex filters to run specific benchmarks
+- Controlling number of iterations
+- Adjusting time limits
+
+### Filter Benchmarks
+
+Run specific benchmarks using regex patterns:
+
+```bash
+# Run only SHA256 benchmarks
+build/bin/bench_bitcoin -filter=SHA256
+
+# Run all wallet-related benchmarks  
+build/bin/bench_bitcoin -filter=Wallet
+```
+
+### List Benchmarks
+
+See all available benchmarks without running:
+
+```bash
+build/bin/bench_bitcoin -list
+```
+
+## What to Benchmark
+
+Benchmarks should focus on **performance-critical components** where degradation has high cost:
+
+### Initial Block Download (IBD)
+
+**Cost**: Slow IBD makes full node operation less accessible
+
+**Benchmark candidates**:
+- Block validation
+- Script verification  
+- Signature checking
+- Database operations
+- UTXO set updates
+
+### Block Template Creation
+
+**Cost**: Slow template creation may reduce fee revenue for miners
+
+**Benchmark candidates**:
+- Transaction selection algorithms
+- Ancestor/descendant calculation
+- Fee estimation
+- Mempool operations
+
+### Block Propagation
+
+**Cost**: Slow propagation may increase orphaned blocks and mining centralization
+
+**Benchmark candidates**:
+- Compact block encoding/decoding
+- Block serialization
+- Network message processing
+
+## Best Practices
+
+### When to Add Benchmarks
+
+<Tip>
+Add benchmarks for components that impact user experience or system performance. Focus on areas where small improvements can have significant impact.
+</Tip>
+
+Benchmarks are appropriate for:
+- Core consensus code (validation, signatures)
+- Frequently called functions
+- Data structure operations on large datasets
+- Cryptographic primitives
+- Database operations
+- Network protocol processing
+
+### When NOT to Use Benchmarks
+
+<Note>
+Benchmarks are ill-suited for testing denial-of-service issues as they use restricted input sets (introducing bias). Use [fuzz tests](/development/fuzzing) instead, which explore the full input space.
+</Note>
+
+### Performance Improvements
+
+A performance improvement may be rejected if:
+
+- Clear end-to-end performance gain cannot be demonstrated
+- Code bloat is too high relative to the improvement
+- Review/maintenance burden outweighs the benefit
+- The benchmark doesn't reflect real-world usage patterns
+
+### Writing Good Benchmarks
+
+1. **Isolate what you're measuring**: Minimize setup/teardown in the benchmark loop
+2. **Use realistic data**: Benchmark with representative inputs
+3. **Avoid optimization artifacts**: Ensure the compiler doesn't optimize away the code
+4. **Measure what matters**: Focus on real bottlenecks, not micro-optimizations
+5. **Consider cache effects**: Benchmark with cold and warm caches
+6. **Document assumptions**: Note any special conditions or configurations
+
+## Example Benchmark
+
+Here's the structure of a typical benchmark:
+
+```cpp
+static void BenchmarkName(benchmark::Bench& bench)
+{
+    // Setup (outside the benchmark loop)
+    SetupData();
+    
+    // The actual benchmark
+    bench.run([&] {
+        // Code to benchmark
+        FunctionToMeasure();
+    });
+    
+    // Cleanup (optional, outside benchmark loop)
+}
+
+BENCHMARK(BenchmarkName);
+```
+
+## Advanced Benchmarking
+
+For more comprehensive performance analysis beyond the internal framework:
+
+### Benchcoin
+
+For in-depth performance monitoring of operations like reindex or IBD:
+
+**Repository**: [bitcoin-dev-tools/benchcoin](https://github.com/bitcoin-dev-tools/benchcoin)
+
+Benchcoin provides:
+- Full IBD timing
+- Reindex performance
+- Memory usage tracking
+- CPU profiling integration
+- Historical performance comparison
+
+### System-Level Profiling
+
+Complement benchmarks with system profiling tools:
+
+- **perf**: CPU profiling on Linux (see [Developer Notes](/development/developer-notes))
+- **Valgrind**: Memory profiling and cache analysis
+- **gprof**: Function-level profiling
+- **Hotspot**: Visual profiling (Linux)
+- **Instruments**: Profiling on macOS
+
+## Interpreting Results
+
+### Statistical Significance
+
+The `err%` column shows measurement variance. Lower is better:
+- **< 1%**: Very stable, reliable results
+- **1-5%**: Good, results are trustworthy
+- **5-10%**: Acceptable, but consider running more iterations
+- **> 10%**: High variance, results may be unreliable
+
+### Comparing Results
+
+When comparing benchmark runs:
+
+1. **Control variables**: Use same hardware, OS, and build configuration
+2. **Multiple runs**: Run benchmarks several times to account for variance
+3. **System state**: Close unnecessary programs, ensure consistent CPU frequency
+4. **Warm-up**: First run may be slower due to cold caches
+5. **Statistical analysis**: Use median or mean with confidence intervals
+
+### Red Flags
+
+- Results varying wildly between runs (high err%)
+- Unexpectedly fast results (compiler may have optimized away code)
+- Results not matching real-world performance observations
+- Benchmark spending most time in setup/teardown
+
+## Continuous Integration
+
+Benchmarks in CI:
+- Compile benchmarks to ensure they build correctly
+- Run smoke tests to verify they execute without crashing  
+- Compare against baseline to detect regressions (in some projects)
+
+<Tip>
+Consider maintaining a benchmark history to track performance trends over time and catch gradual regressions.
+</Tip>

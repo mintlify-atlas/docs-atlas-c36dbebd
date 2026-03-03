@@ -1,0 +1,75 @@
+---
+title: Build Dependencies
+description: Complete overview of Bitcoin Core build dependencies and requirements
+---
+
+Bitcoin Core has several required and optional dependencies that you'll need to install before building. You can either install these dependencies using your system's package manager or self-compile them using the depends system in the source repository.
+
+## Compiler Requirements
+
+Bitcoin Core requires one of the following compilers:
+
+| Compiler | Minimum Version |
+| --- | --- |
+| [Clang](https://clang.llvm.org) | 17.0 |
+| [GCC](https://gcc.gnu.org) | 12.1 |
+
+## Required Dependencies
+
+### Build Dependencies
+
+These dependencies are required for all builds:
+
+| Dependency | Minimum Version | Purpose |
+| --- | --- | --- |
+| [Boost](https://www.boost.org/users/download/) | 1.74.0 | C++ libraries |
+| CMake | 3.22 | Build system |
+| [libevent](https://github.com/libevent/libevent/releases) | 2.1.8 | Event notification |
+
+### Runtime Dependencies
+
+| Dependency | Minimum Version | Purpose |
+| --- | --- | --- |
+| glibc | 2.31 | GNU C Library (Linux) |
+
+## Optional Dependencies
+
+### Build Dependencies
+
+| Dependency | Minimum Version | Purpose |
+| --- | --- | --- |
+| [Cap'n Proto](https://capnproto.org) | 0.7.1 | IPC functionality |
+| Python | 3.10 | Scripts and tests |
+| [Qt](https://download.qt.io/archive/qt/) | 6.2 | GUI |
+| [qrencode](https://fukuchi.org/works/qrencode/) | N/A | QR code generation (GUI) |
+| [SQLite](https://sqlite.org) | 3.7.17 | Wallet functionality |
+| [systemtap](https://sourceware.org/systemtap/) | N/A | USDT tracing |
+| [ZeroMQ](https://github.com/zeromq/libzmq/releases) | 4.0.0 | Notifications |
+
+### Runtime Dependencies
+
+| Dependency | Minimum Version | Purpose |
+| --- | --- | --- |
+| [Fontconfig](https://www.freedesktop.org/wiki/Software/fontconfig/) | 2.6 | Font configuration (GUI) |
+| [FreeType](https://freetype.org) | 2.3.0 | Font rendering (GUI) |
+
+## Dependency Installation
+
+<CardGroup cols={2}>
+  <Card title="Linux/Unix" icon="linux" href="/building/unix">
+    Install dependencies on Ubuntu, Debian, Fedora, Alpine, and other Linux distributions
+  </Card>
+  <Card title="macOS" icon="apple" href="/building/macos">
+    Install dependencies using Homebrew on macOS
+  </Card>
+  <Card title="Windows" icon="windows" href="/building/windows">
+    Cross-compile on Linux/WSL using MinGW-w64
+  </Card>
+  <Card title="BSD" icon="freebsd" href="/building/bsd">
+    Install dependencies on FreeBSD, OpenBSD, and NetBSD
+  </Card>
+</CardGroup>
+
+## Using the Depends System
+
+If you prefer to self-compile dependencies instead of using system packages, Bitcoin Core includes a depends system that can build all required dependencies from source. See the README.md in the `depends/` directory of the source code for more information.

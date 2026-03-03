@@ -1,0 +1,178 @@
+---
+title: "Blockchain Storage and Validation"
+description: "Understanding how Bitcoin Core validates and stores the blockchain data structure"
+---
+
+## Overview
+
+Bitcoin Core maintains the blockchain as a tree-shaped data structure, with each block containing a cryptographically-secured link to its predecessor. The implementation manages block storage, validation states, and efficient access through sophisticated indexing mechanisms.
+
+## Block Structure
+
+Every block in Bitcoin consists of two main components:
+
+### Block Header
+
+The block header (80 bytes) contains:
+
+- **nVersion** (4 bytes): Block version number indicating protocol rules
+- **hashPrevBlock** (32 bytes): SHA256 hash of the previous block header
+- **hashMerkleRoot** (32 bytes): Root of the merkle tree of all transactions
+- **nTime** (4 bytes): Unix timestamp when the miner started hashing
+- **nBits** (4 bytes): Compact representation of the target difficulty
+- **nNonce** (4 bytes): Counter used for proof-of-work computation
+
+### Block Body
+
+The block body contains the vector of transactions (`vtx`), where:
+- The first transaction must be a coinbase transaction creating new coins
+- Subsequent transactions spend previously unspent outputs
+- All transactions are included in the merkle tree whose root is in the header
+
+## Validation States
+
+Bitcoin Core tracks multiple validation levels for each block using the `BlockStatus` enumeration:
+
+<CodeGroup>
+```cpp Validation Levels
+BLOCK_VALID_TREE         = 2  // Headers validated
+BLOCK_VALID_TRANSACTIONS = 3  // Transactions structurally valid
+BLOCK_VALID_CHAIN        = 4  // No double-spends, valid outputs
+BLOCK_VALID_SCRIPTS      = 5  // All signatures verified
+```
+</CodeGroup>
+
+### Progressive Validation
+
+1. **VALID_TREE**: All parent headers found, difficulty matches, timestamp >= median of previous 11 blocks
+2. **VALID_TRANSACTIONS**: First tx is coinbase, no duplicate txids, merkle root matches
+3. **VALID_CHAIN**: Outputs don't overspend inputs, no double-spends, coinbase maturity enforced
+4. **VALID_SCRIPTS**: All script signatures and witness data verified
+
+<Note>
+Blocks can be at different validation levels. A block might have VALID_TRANSACTIONS but not yet VALID_SCRIPTS if script verification hasn't completed.
+</Note>
+
+## Storage Architecture
+
+### Block Files (blk*.dat)
+
+Bitcoin Core stores blocks in sequential files:
+
+- Located in the `blocks/` directory
+- Named `blkNNNNN.dat` where NNNNN is a 5-digit sequence number
+- Each file is approximately 128 MiB
+- Blocks are stored in network serialization format
+- Files also contain a 4-byte magic identifier and size prefix
+
+### Undo Files (rev*.dat)
+
+For each block file, there's a corresponding undo file:
+
+- Contains the UTXOs consumed by transactions in the block
+- Enables efficient blockchain reorganizations
+- Required for rolling back blocks during reorgs
+- Stored in custom compressed format
+
+### Block Index (LevelDB)
+
+The `blocks/index/` directory contains a LevelDB database that indexes:
+
+- Block hash to file position mapping
+- Block metadata (height, chainwork, validation status)
+- Block tree structure (parent/child relationships)
+- Transaction counts and timestamps
+
+<Tip>
+The `-blocksdir` option can specify an alternate location for block storage, useful for systems with multiple drives.
+</Tip>
+
+## Chain State (UTXO Set)
+
+The `chainstate/` directory contains a LevelDB database representing the **UTXO set** - all currently unspent transaction outputs.
+
+### Coin Structure
+
+Each UTXO ("Coin" in the codebase) contains:
+
+```cpp
+class Coin {
+    CTxOut out;              // The output (amount + scriptPubKey)
+    unsigned int fCoinBase;  // Is this from a coinbase?
+    uint32_t nHeight;        // Height when included in blockchain
+};
+```
+
+### Caching Architecture
+
+Bitcoin Core uses a multi-level caching system:
+
+1. **In-memory cache**: Fast access to recently used UTXOs
+2. **LevelDB database**: Persistent storage of the complete UTXO set
+3. **Cache flushing**: Periodic writes to disk to maintain consistency
+
+## Block Index and Chain Organization
+
+The `CBlockIndex` class represents each block in the block tree:
+
+- **phashBlock**: Pointer to the block's hash
+- **pprev**: Pointer to the parent block index
+- **nHeight**: Height in the main chain (genesis = 0)
+- **nChainWork**: Total work in the chain up to this block
+- **nTx**: Number of transactions in the block
+- **nChainTx**: Cumulative transactions up to this block
+
+### Active Chain
+
+The "active chain" is the path from the genesis block to the current tip with the most accumulated proof-of-work. During reorgs, the active chain can change if a competing chain achieves more work.
+
+## Pruning
+
+Bitcoin Core supports blockchain pruning to reduce disk usage:
+
+- Retains at least the most recent **288 blocks** (MIN_BLOCKS_TO_KEEP)
+- Deletes old block files while maintaining the UTXO set
+- Maintains the complete block index for all headers
+- Minimum 550 MiB required for block and undo files
+
+<Warning>
+Pruned nodes cannot serve historical blocks to other nodes and cannot rescan the wallet before the pruning point.
+</Warning>
+
+## Time Constraints
+
+Bitcoin enforces temporal consensus rules:
+
+- Block timestamp must be greater than the median of the previous 11 blocks
+- Block timestamp cannot be more than **2 hours in the future** (MAX_FUTURE_BLOCK_TIME)
+- These rules prevent timestamp manipulation attacks
+
+## Reorganization Handling
+
+When a competing chain becomes longer:
+
+1. Identify the fork point (common ancestor)
+2. Disconnect blocks from the old chain back to the fork
+3. Use undo data to restore spent UTXOs
+4. Connect blocks from the new chain
+5. Update the UTXO set based on new chain's transactions
+
+## Assumevalid and Checkpoints
+
+### Assumevalid
+
+Bitcoin Core can skip signature verification for blocks before a certain hash:
+
+- Defined in `defaultAssumeValid` consensus parameter
+- Only skips script verification, not other validation
+- Updated with each release to a recent block
+- Can be disabled with `-assumevalid=0`
+
+<Info>
+Assumevalid significantly speeds up initial block download while maintaining security through proof-of-work verification.
+</Info>
+
+## Related Concepts
+
+- [Consensus Rules](/concepts/consensus) - The validation rules enforced during block verification
+- [Transactions](/concepts/transactions) - The structure and lifecycle of Bitcoin transactions

@@ -1,0 +1,249 @@
+---
+title: "JSON-RPC Interface Overview"
+description: "Learn how to interact with Bitcoin Core using the JSON-RPC API, including endpoints, authentication, and request formats"
+---
+
+# JSON-RPC Interface Overview
+
+The Bitcoin Core JSON-RPC interface provides programmatic access to blockchain data, wallet operations, network information, and mining functions. The headless daemon `bitcoind` has the JSON-RPC API enabled by default, while the GUI `bitcoin-qt` requires the `-server` option to enable it.
+
+## Endpoints
+
+Bitcoin Core provides two JSON-RPC endpoints:
+
+### Root Endpoint (`/`)
+
+The root endpoint is always active and can:
+- Service all non-wallet requests
+- Service wallet requests when exactly one wallet is loaded
+
+```bash
+curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getblockcount", "params": []}' \
+  -H 'content-type: application/json' \
+  http://localhost:8332/
+```
+
+### Wallet Endpoint (`/wallet/<walletname>/`)
+
+The wallet endpoint:
+- Only available when wallet component is compiled in
+- Can service both wallet and non-wallet requests
+- **Required** when two or more wallets are loaded
+- Used automatically by `bitcoin-cli` with the `-rpcwallet=` parameter
+
+```bash
+curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getbalance", "params": []}' \
+  -H 'content-type: application/json' \
+  http://localhost:8332/wallet/my-wallet
+```
+
+<Note>
+Best practice: Use the `/wallet/<walletname>/` endpoint for **all** requests when multiple wallets are loaded.
+</Note>
+
+## Authentication
+
+Bitcoin Core supports multiple authentication methods:
+
+### Cookie Authentication (Recommended)
+
+When no `rpcpassword` is specified, Bitcoin Core generates unique credentials on each restart:
+- Credentials stored in `.cookie` file in the data directory
+- File readable only by the user running Bitcoin Core
+- Automatic authentication for local RPC clients
+- Most secure method for local connections
+
+### RPC Auth Script
+
+For static credentials, use the `share/rpcauth/rpcauth.py` script:
+
+```bash
+python3 share/rpcauth/rpcauth.py myusername
+```
+
+Add the generated string to `bitcoin.conf`:
+
+```
+rpcauth=myusername:salt$hash
+```
+
+### Manual Username/Password
+
+Directly specify credentials in `bitcoin.conf` (least secure):
+
+```
+rpcuser=myusername
+rpcpassword=myStrongPassword123
+```
+
+<Warning>
+Ensure you choose a strong and unique passphrase. Never expose RPC over public networks without additional encryption (VPN, SSH tunnel, etc.).
+</Warning>
+
+## JSON-RPC Protocol Versions
+
+Bitcoin Core supports both JSON-RPC 1.1 and 2.0:
+
+<ParamField name="Version 1.1" type="legacy">
+  - Request marker: `"version": "1.1"` (or omitted)
+  - No response marker
+  - Both `error` and `result` fields always present
+  - Returns HTTP 200 only on success
+</ParamField>
+
+<ParamField name="Version 2.0" type="current">
+  - Request marker: `"jsonrpc": "2.0"` (required)
+  - Response marker: `"jsonrpc": "2.0"`
+  - Only one of `error` or `result` present
+  - Always returns HTTP 200 unless HTTP server error
+  - Supports notifications (requests without `id` field)
+</ParamField>
+
+### Version 2.0 Example
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "curltest",
+  "method": "getblockchaininfo",
+  "params": []
+}
+```
+
+## Parameter Passing
+
+Bitcoin Core supports three parameter formats:
+
+### By Position
+
+```bash
+bitcoin-cli createwallet mywallet false false "" false false true
+```
+
+### By Name
+
+```bash
+bitcoin-cli -named createwallet wallet_name=mywallet load_on_startup=true
+```
+
+### Mixed (Named with Positional Args)
+
+Use the `args` array for initial positional values combined with named parameters:
+
+```bash
+bitcoin-cli -named createwallet mywallet load_on_startup=true
+# Equivalent to: {"args": ["mywallet"], "load_on_startup": true}
+```
+
+<Tip>
+The `bitcoin rpc` command is a newer alternative to `bitcoin-cli -named`.
+</Tip>
+
+## Versioning and Deprecation
+
+The RPC interface is implicitly versioned on Bitcoin Core's major version:
+
+- Check version with `getnetworkinfo` RPC (`version` field)
+- Deprecated features can be re-enabled during grace period using `-deprecatedrpc=<feature>`
+- Release notes document deprecated features and re-enable instructions
+- Breaking changes only occur between major versions
+
+## Security Best Practices
+
+### Securing the Executable
+
+<Warning>
+Anyone with physical or remote access to the system running Bitcoin Core can compromise the RPC interface. Do not use Bitcoin Core for security-sensitive operations on shared or untrusted systems.
+</Warning>
+
+### Securing Local Network Access
+
+By default, RPC is only accessible from localhost:
+- Requires valid authentication credentials
+- Any local program can access if credentials are compromised
+- Only run trusted software on the same system
+
+### Securing Remote Network Access
+
+<Warning>
+**Never expose RPC over the public Internet without encryption.**
+</Warning>
+
+For remote access:
+- Use only over secure private networks
+- Or use VPN/SSH tunneling
+- Configure `rpcallowip` and `rpcbind` carefully
+- RPC does **not** use encryption by default
+- Credentials sent as clear text over network
+
+### Docker Security
+
+When exposing RPC in Docker, bind only to localhost:
+
+```bash
+docker run -p 127.0.0.1:8332:8332 bitcoin/bitcoin
+```
+
+### String Handling
+
+RPC interface only escapes data for JSON encoding:
+- Always validate and escape RPC data in your applications
+- Display serialized data in hex form only
+- Prevent injection attacks (path traversal, XSS, etc.)
+
+## Consistency Guarantees
+
+### Chain State
+
+State returned via RPCs is guaranteed to be up-to-date with the chain state immediately prior to the call's execution.
+
+### Transaction Pool (Mempool)
+
+Mempool state returned is:
+- Consistent with itself and chain state at call time
+- Only includes mine-able transactions
+- May not reflect very recent mempool changes
+- Reflects all prior mempool/chain RPC effects
+
+### Wallet State
+
+Wallet RPCs return state that is:
+- Consistent with itself and chain state
+- Reflects all blocks and confirmed transactions
+- May lag behind current mempool state
+- BIP-125 replacements may not be immediately reflected
+
+## Limitations
+
+<Warning>
+**File Descriptor Exhaustion**: Opening too many simultaneous HTTP connections can crash the node if the system runs out of file descriptors.
+</Warning>
+
+Mitigation strategies:
+- Increase system file descriptor limit
+- Limit concurrent connections to RPC interface
+- Avoid making hundreds of simultaneous requests
+
+## Common RPC Categories
+
+Bitcoin Core organizes RPCs into functional categories:
+
+- [Blockchain RPCs](/api/blockchain-rpcs) - Query blockchain data
+- [Wallet RPCs](/api/wallet-rpcs) - Manage wallets and transactions
+- [Network RPCs](/api/network-rpcs) - Network and peer information
+- [Mining RPCs](/api/mining-rpcs) - Mining and block generation
+- [Utility RPCs](/api/util-rpcs) - Utility functions and validation
+
+## Getting Help
+
+List all available commands:
+
+```bash
+bitcoin-cli help
+```
+
+Get help for a specific command:
+
+```bash
+bitcoin-cli help getblockchaininfo
+```

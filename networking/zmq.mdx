@@ -1,0 +1,603 @@
+---
+title: "ZMQ Notification System"
+description: "Configure Bitcoin Core's ZeroMQ notification interface for real-time block and transaction events"
+---
+
+## Overview
+
+ZeroMQ (ZMQ) is a lightweight messaging library that enables Bitcoin Core to publish real-time notifications about blocks and transactions. This provides a push-based alternative to polling RPC methods for monitoring blockchain events.
+
+<Note>
+ZMQ is a read-only notification interface. It requires no authentication and implements no two-way protocol. Subscribers should validate received data.
+</Note>
+
+## What is ZeroMQ?
+
+ZeroMQ provides:
+
+- **Message-oriented semantics**: Publish/subscribe, request/reply, push/pull
+- **Self-connecting sockets**: Automatic connection recovery
+- **Self-healing**: Resilient to endpoint failures
+- **No buffering needed**: All-at-once message delivery
+- **Multiple transports**: TCP, IPC, inproc, Unix sockets
+
+### Key Features
+
+- **Real-time notifications**: Instant push when events occur
+- **Multiple subscribers**: Many clients can listen simultaneously  
+- **Lightweight**: Minimal overhead on Bitcoin Core
+- **Language agnostic**: Works with any ZMQ client library
+- **Resilient**: Either end can start/stop independently
+
+## Prerequisites
+
+<Steps>
+
+<Step title="Install ZeroMQ Library">
+**Debian/Ubuntu:**
+
+```bash
+sudo apt install libzmq3-dev
+```
+
+**macOS:**
+
+```bash
+brew install zeromq
+```
+
+**Note**: You only need `libzmq`, not the C++ wrapper.
+</Step>
+
+<Step title="Build Bitcoin Core with ZMQ Support">
+```bash
+cmake -B build -DWITH_ZMQ=ON
+cmake --build build
+```
+</Step>
+
+<Step title="Install Python ZMQ (Optional)">
+For example client scripts:
+
+```bash
+pip install pyzmq
+```
+</Step>
+
+</Steps>
+
+<Tip>
+ZMQ support requires libzmq version 4.0.0 or higher. Check your package manager for the exact version.
+</Tip>
+
+## Notification Types
+
+Bitcoin Core supports five ZMQ notification topics:
+
+### Block Notifications
+
+| Topic | Description | Body Content |
+|-------|-------------|-------------|
+| `hashblock` | Block hash notification | 32-byte reversed block hash |
+| `rawblock` | Full block notification | Serialized block data |
+
+### Transaction Notifications
+
+| Topic | Description | Body Content |
+|-------|-------------|-------------|
+| `hashtx` | Transaction hash notification | 32-byte reversed tx hash |
+| `rawtx` | Full transaction notification | Serialized transaction data |
+
+### Sequence Notifications
+
+| Topic | Description | Body Content |
+|-------|-------------|-------------|
+| `sequence` | Mempool/block sequence | Hash + event type + sequence |
+
+## Configuration Options
+
+### Basic Configuration
+
+```bash
+# Publish block hashes
+-zmqpubhashblock=tcp://127.0.0.1:28332
+
+# Publish raw blocks
+-zmqpubrawblock=tcp://127.0.0.1:28332
+
+# Publish transaction hashes
+-zmqpubhashtx=tcp://127.0.0.1:28333
+
+# Publish raw transactions
+-zmqpubrawtx=tcp://127.0.0.1:28333
+
+# Publish sequence events
+-zmqpubsequence=tcp://127.0.0.1:28334
+```
+
+### Multiple Endpoints
+
+You can publish the same notification to multiple addresses:
+
+```bash
+bitcoind -zmqpubhashtx=tcp://127.0.0.1:28332 \
+         -zmqpubhashtx=tcp://192.168.1.2:28332 \
+         -zmqpubhashblock="tcp://[::1]:28333"
+```
+
+### High Water Mark (HWM)
+
+Control the message queue size for each notification:
+
+```bash
+# Set HWM for hashtx (default: 1000)
+-zmqpubhashtxhwm=10000
+
+# Set HWM for other topics
+-zmqpubhashblockhwm=1000
+-zmqpubrawblockhwm=1000  
+-zmqpubrawtxhwm=1000
+-zmqpubsequencehwm=1000
+```
+
+<Note>
+The high water mark is the maximum number of messages to queue before dropping. Higher values use more memory but prevent message loss during bursts.
+</Note>
+
+## Transport Types
+
+### TCP Sockets
+
+```bash
+# IPv4
+-zmqpubhashtx=tcp://127.0.0.1:28332
+
+# IPv6  
+-zmqpubhashtx=tcp://[::1]:28332
+
+# All interfaces
+-zmqpubhashtx=tcp://*:28332
+```
+
+### Unix Domain Sockets
+
+```bash
+-zmqpubrawtx=unix:/tmp/bitcoind.tx.raw
+```
+
+### IPC Sockets
+
+```bash
+-zmqpubrawblock=ipc:///tmp/bitcoind.rawblock
+```
+
+## Message Format
+
+All ZMQ messages have three parts:
+
+```
+[topic] [body] [sequence_number]
+```
+
+### Message Structure
+
+| Part | Type | Description |
+|------|------|-------------|
+| Topic | String | Message topic (e.g., "hashtx", "rawblock") |
+| Body | Binary | Message payload (varies by topic) |
+| Sequence | uint32 | Message counter (little-endian) |
+
+### Topic-Specific Body Formats
+
+**rawtx:**
+```
+[topic: "rawtx"] [serialized transaction] [4-byte LE sequence]
+```
+
+**hashtx:**
+```
+[topic: "hashtx"] [32-byte reversed tx hash] [4-byte LE sequence]
+```
+
+**rawblock:**
+```
+[topic: "rawblock"] [serialized block] [4-byte LE sequence]
+```
+
+**hashblock:**
+```
+[topic: "hashblock"] [32-byte reversed block hash] [4-byte LE sequence]
+```
+
+**sequence:**
+```
+[topic: "sequence"] [32-byte hash + event type + 8-byte data] [4-byte LE sequence]
+```
+
+<Tip>
+All hashes are in reversed byte order (same format as RPC and block explorers), not internal byte order.
+</Tip>
+
+## Sequence Notifications
+
+The `sequence` topic provides ordered mempool and block events:
+
+### Event Types
+
+| Type | Event | Body Format |
+|------|-------|-------------|
+| `C` | Block connected | `[32-byte block hash]C` |
+| `D` | Block disconnected | `[32-byte block hash]D` |
+| `R` | Tx removed from mempool | `[32-byte tx hash]R[8-byte sequence]` |
+| `A` | Tx added to mempool | `[32-byte tx hash]A[8-byte sequence]` |
+
+### Sequence Number
+
+Each topic maintains its own sequence counter:
+
+- Increments with each message
+- Allows detection of lost messages
+- Independent per topic
+- Wraps at 2^32
+
+<Warning>
+Sequence numbers are topic-specific. A gap in sequence numbers indicates lost messages for that topic.
+</Warning>
+
+## Example Configurations
+
+### Monitor New Transactions
+
+```bash bitcoin.conf
+# Get notified of new transactions
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubhashtxhwm=10000
+```
+
+### Monitor New Blocks
+
+```bash bitcoin.conf
+# Get notified of new blocks  
+zmqpubhashblock=tcp://127.0.0.1:28333
+zmqpubrawblock=tcp://127.0.0.1:28333
+```
+
+### Full Monitoring Setup
+
+```bash bitcoin.conf
+# All notification types on different ports
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28333
+zmqpubhashblock=tcp://127.0.0.1:28334
+zmqpubrawblock=tcp://127.0.0.1:28335
+zmqpubsequence=tcp://127.0.0.1:28336
+
+# Set high water marks
+zmqpubhashtxhwm=10000
+zmqpubrawtxhwm=10000
+zmqpubhashblockhwm=1000
+zmqpubrawblockhwm=100
+zmqpubsequencehwm=10000
+```
+
+### Unix Sockets for Local Apps
+
+```bash bitcoin.conf
+# Use Unix sockets for local applications
+zmqpubhashtx=unix:/tmp/bitcoind.hashtx
+zmqpubrawtx=unix:/tmp/bitcoind.rawtx  
+zmqpubhashblock=unix:/tmp/bitcoind.hashblock
+zmqpubrawblock=unix:/tmp/bitcoind.rawblock
+```
+
+## Client Implementation
+
+### Python Example
+
+Bitcoin Core includes example Python clients in `contrib/zmq/`:
+
+```python
+#!/usr/bin/env python3
+import zmq
+
+# Create ZMQ context and socket
+ctx = zmq.Context()
+sock = ctx.socket(zmq.SUB)
+
+# Connect to Bitcoin Core
+sock.connect("tcp://127.0.0.1:28332")
+
+# Subscribe to topics
+sock.setsockopt(zmq.SUBSCRIBE, b"hashtx")
+sock.setsockopt(zmq.SUBSCRIBE, b"hashblock")
+
+while True:
+    # Receive multipart message
+    topic, body, seq = sock.recv_multipart()
+    
+    sequence = int.from_bytes(seq, 'little')
+    
+    if topic == b"hashtx":
+        tx_hash = body.hex()
+        print(f"New TX: {tx_hash} (seq: {sequence})")
+    
+    elif topic == b"hashblock":
+        block_hash = body.hex()
+        print(f"New Block: {block_hash} (seq: {sequence})")
+```
+
+<Tip>
+See `contrib/zmq/zmq_sub.py` in the Bitcoin Core repository for a complete working example.
+</Tip>
+
+### Subscribe to Specific Topics
+
+```python
+# Subscribe to all messages (not recommended)
+sock.setsockopt(zmq.SUBSCRIBE, b"")
+
+# Subscribe to specific topics
+sock.setsockopt(zmq.SUBSCRIBE, b"hashtx")
+sock.setsockopt(zmq.SUBSCRIBE, b"hashblock")
+
+# Subscribe to hash messages only
+sock.setsockopt(zmq.SUBSCRIBE, b"hash")
+```
+
+<Warning>
+You must set ZMQ_SUBSCRIBE option or no messages will be received. Subscribing to `b""` receives all topics.
+</Warning>
+
+## Advanced Features
+
+### TCP Keepalive
+
+ZMQ_TCP_KEEPALIVE is automatically enabled:
+
+```bash
+# Linux: Adjust TCP keepalive timing
+sudo sysctl -w net.ipv4.tcp_keepalive_time=600
+```
+
+This prevents silent connection drops by network middleboxes.
+
+### IPv6 Support
+
+ZMQ_IPV6 is enabled by default:
+
+```bash
+# IPv6 endpoint
+-zmqpubhashtx=tcp://[::1]:28332
+
+# Dual-stack (IPv4 and IPv6)
+-zmqpubhashtx=tcp://*:28332
+```
+
+### Lost Message Detection
+
+Detect lost messages using sequence numbers:
+
+```python
+last_seq = {}
+
+while True:
+    topic, body, seq = sock.recv_multipart()
+    sequence = int.from_bytes(seq, 'little')
+    
+    if topic in last_seq:
+        expected = (last_seq[topic] + 1) % (2**32)
+        if sequence != expected:
+            lost = (sequence - expected) % (2**32)
+            print(f"Lost {lost} messages on {topic}")
+    
+    last_seq[topic] = sequence
+```
+
+## Behavior and Limitations
+
+### Transaction Notifications
+
+<Note>
+Transactions are notified **multiple times**:
+1. When added to mempool
+2. When included in a block
+3. In subsequent blocks if reorganizations occur
+
+Track transaction state separately if you need to handle each only once.
+</Note>
+
+### Block Notifications
+
+Block notifications occur when:
+
+- New block extends the active chain tip
+- Block reorganization changes the tip
+
+<Warning>
+During reorganizations, only the new tip is notified. Subscribers must track the chain themselves to detect and handle reorgs.
+</Warning>
+
+Notifications are NOT sent when:
+- `invalidateblock` RPC is called
+- Historical blocks are connected during sync (with assumeutxo)
+
+### Sequence Topic Behavior
+
+The `sequence` topic publishes **all** block connections and disconnections, unlike `hashblock`.
+
+This enables:
+- Complete reorg detection
+- Mempool state tracking  
+- Ordered event processing
+
+## Security Considerations
+
+<Warning>
+**Important Security Notes:**
+
+1. **No authentication**: Anyone who can connect can subscribe
+2. **No authorization**: No access control on connections
+3. **Read-only**: Subscribers cannot send commands
+4. **No validation**: Subscribers must validate all received data
+5. **Trusted network only**: Expose ZMQ ports only to trusted clients
+</Warning>
+
+### Best Practices
+
+<Note>
+**Security Best Practices:**
+
+- Use Unix sockets for local applications
+- Bind TCP sockets to localhost (127.0.0.1) only
+- Use firewall rules to restrict access
+- Validate all received data before use
+- Monitor for gaps in sequence numbers
+- Don't expose ZMQ ports to the Internet
+</Note>
+
+### Firewall Configuration
+
+```bash
+# Allow only local connections
+bitcoind -zmqpubhashtx=tcp://127.0.0.1:28332
+
+# Allow specific subnet
+# Use firewall to restrict:
+sudo ufw allow from 192.168.1.0/24 to any port 28332
+```
+
+## Troubleshooting
+
+### ZMQ Not Compiled In
+
+```
+Error: Invalid argument "-zmqpubhashtx"
+```
+
+**Solution**: Rebuild with ZMQ support:
+
+```bash
+cmake -B build -DWITH_ZMQ=ON
+cmake --build build
+```
+
+### No Messages Received
+
+**Check subscription**:
+
+```python
+# Must subscribe to topics!
+sock.setsockopt(zmq.SUBSCRIBE, b"hashtx")
+```
+
+**Check connection**:
+
+```python
+import zmq
+ctx = zmq.Context()
+sock = ctx.socket(zmq.SUB)  
+sock.connect("tcp://127.0.0.1:28332")  # Correct port?
+sock.setsockopt(zmq.SUBSCRIBE, b"")   # Subscribe to all
+```
+
+### Port Already in Use
+
+```
+Error: Address already in use
+```
+
+**Solution**: Check if port is in use:
+
+```bash
+netstat -tlnp | grep 28332
+```
+
+Use a different port or stop the conflicting service.
+
+### Connection Refused
+
+**Check Bitcoin Core is running**:
+
+```bash
+bitcoin-cli getblockcount
+```
+
+**Verify ZMQ is configured**:
+
+```bash
+ps aux | grep bitcoind | grep zmq
+```
+
+## Performance Tuning
+
+### High Water Mark Sizing
+
+```bash
+# Low traffic: Small HWM
+-zmqpubhashblockhwm=100
+
+# High traffic: Large HWM  
+-zmqpubhashtxhwm=100000
+```
+
+<Tip>
+Set HWM based on expected message rate and acceptable memory usage:
+- Blocks: ~100-1000 (low rate)
+- Transactions: 10000-100000 (high rate)
+- Sequence: 10000+ (tracks everything)
+</Tip>
+
+### Transport Selection
+
+| Transport | Use Case | Performance |
+|-----------|----------|-------------|
+| Unix socket | Local apps, same machine | Fastest |
+| TCP localhost | Local apps, multiple languages | Fast |
+| TCP network | Remote subscribers | Network dependent |
+| IPC | Inter-process communication | Very fast |
+
+## Use Cases
+
+### Real-Time Block Explorer
+
+```bash bitcoin.conf
+zmqpubhashblock=tcp://127.0.0.1:28332
+zmqpubrawblock=tcp://127.0.0.1:28332  
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28332
+```
+
+### Payment Processing
+
+```bash bitcoin.conf
+# Monitor specific transactions
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubrawblock=tcp://127.0.0.1:28333
+zmqpubsequence=tcp://127.0.0.1:28334
+```
+
+### Lightning Network Node
+
+```bash bitcoin.conf
+# Real-time block notifications
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28333
+```
+
+### Analytics Platform
+
+```bash bitcoin.conf
+# All events with sequence tracking
+zmqpubsequence=tcp://127.0.0.1:28332
+zmqpubrawblock=tcp://127.0.0.1:28333
+zmqpubrawtx=tcp://127.0.0.1:28334  
+zmqpubsequencehwm=100000
+```
+
+## See Also
+
+- [P2P Network](/networking/p2p-network) - Network configuration
+- [RPC Interface](/api-reference/rpc) - JSON-RPC API
+- [ZeroMQ Documentation](https://zeromq.org/)
+- [ZeroMQ API Reference](https://libzmq.readthedocs.io/)
+- `contrib/zmq/zmq_sub.py` - Example Python client

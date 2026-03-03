@@ -1,0 +1,382 @@
+---
+title: "Wallet Types and HD Wallets"
+description: "Understanding Bitcoin Core wallet architectures, HD derivation, and descriptor wallets"
+---
+
+## Overview
+
+Bitcoin Core wallets manage private keys, track balances, and create transactions. Since version 0.21, Bitcoin Core supports both legacy wallets and modern descriptor wallets, with descriptor wallets now the default and recommended approach.
+
+## Wallet Architecture Evolution
+
+### Legacy Wallets (Pre-0.21)
+
+Original Bitcoin Core wallets were collections of independent key pairs:
+
+- Each address generated from a random private key
+- No deterministic relationship between keys
+- Required frequent backups (every 100 keys used)
+- Berkeley DB (BDB) for storage
+- Metadata stored alongside keys
+
+<Warning>
+Legacy wallets are deprecated. Existing legacy wallets should be migrated to descriptor wallets using the `migratewallet` RPC.
+</Warning>
+
+### Descriptor Wallets (0.21+)
+
+Modern wallet architecture using output descriptors:
+
+- **Output descriptors** define how to derive addresses
+- Deterministic key derivation from HD seeds
+- SQLite database for storage
+- Clear separation between private keys and watch-only functionality
+- Support for complex spending conditions (multisig, miniscript, taproot)
+
+## Hierarchical Deterministic (HD) Wallets
+
+### BIP 32: HD Key Derivation
+
+HD wallets derive all keys from a single seed:
+
+```
+Master Seed (256 bits)
+    ↓
+Master Extended Key (xprv/xpub)
+    ↓
+Child Keys (using derivation paths)
+```
+
+#### Extended Keys
+
+Extended keys contain:
+- **Private/Public key** (32/33 bytes)
+- **Chain code** (32 bytes): Entropy for child derivation
+- **Depth**: Generation from master
+- **Parent fingerprint**: First 4 bytes of parent's hash
+- **Child index**: Index in parent's children
+
+#### Derivation Functions
+
+**Hardened derivation** (index ≥ 2³¹):
+- Uses parent private key
+- Notation: `m/0'` or `m/0h`
+- Cannot derive public child from xpub
+- More secure for account-level keys
+
+**Non-hardened derivation** (index < 2³¹):
+- Uses parent public key
+- Notation: `m/0`
+- Can derive public child from xpub alone
+- Useful for watch-only wallets
+
+### Standard Derivation Paths
+
+Bitcoin Core descriptor wallets use BIP 44/49/84/86 paths:
+
+<CodeGroup>
+```plaintext BIP 44 (P2PKH)
+m / 44' / 0' / 0' / change / index
+```
+
+```plaintext BIP 49 (P2SH-P2WPKH)
+m / 49' / 0' / 0' / change / index
+```
+
+```plaintext BIP 84 (P2WPKH)
+m / 84' / 0' / 0' / change / index
+```
+
+```plaintext BIP 86 (P2TR)
+m / 86' / 0' / 0' / change / index
+```
+</CodeGroup>
+
+Where:
+- **44'/49'/84'/86'**: Purpose (BIP number)
+- **0'**: Coin type (0 = Bitcoin mainnet, 1 = testnet)
+- **0'**: Account number
+- **change**: 0 = external (receiving), 1 = internal (change)
+- **index**: Address index
+
+<Note>
+Descriptor wallets automatically generate addresses following these standard paths, ensuring compatibility with hardware wallets and other software.
+</Note>
+
+## Output Descriptors
+
+Descriptors are a language for describing how to derive scriptPubKeys:
+
+### Basic Descriptor Types
+
+**Pay-to-PubKey-Hash (P2PKH)**:
+```plaintext
+pkh([fingerprint/44'/0'/0']xpub.../0/*)
+```
+
+**Native SegWit (P2WPKH)**:
+```plaintext
+wpkh([fingerprint/84'/0'/0']xpub.../0/*)
+```
+
+**Taproot (P2TR)**:
+```plaintext
+tr([fingerprint/86'/0'/0']xpub.../0/*)
+```
+
+### Descriptor Components
+
+**Key Origin Information** `[fingerprint/path]`:
+- 8 hex characters for master key fingerprint
+- Derivation path from master to xpub
+- Enables hardware wallet integration
+
+**Wildcard derivation** `/*`:
+- Generates a range of addresses
+- Default range: 0-1000
+- Can specify custom range: `/0/*` or `/1/*`
+
+**Multipath descriptors** `<0;1>/*`:
+- Compact representation for receive and change paths
+- Expands to two descriptors: `/0/*` and `/1/*`
+
+### Advanced Descriptors
+
+**Multisig (P2WSH)**:
+```plaintext
+wsh(multi(2,xpub1/0/*,xpub2/0/*,xpub3/0/*))
+```
+
+**Sorted Multisig**:
+```plaintext
+wsh(sortedmulti(2,xpub1/0/*,xpub2/0/*,xpub3/0/*))
+```
+
+**Miniscript in Taproot**:
+```plaintext
+tr(internal_key,{pk(key1),pk(key2),older(144)})
+```
+
+<Info>
+Miniscript support allows complex spending conditions while maintaining analyzability and efficient signing.
+</Info>
+
+## Wallet Database Storage
+
+### SQLite Database (Descriptor Wallets)
+
+Descriptor wallets use SQLite:
+
+- **wallet.dat**: Main database file
+- **wallet.dat-journal**: Rollback journal
+- Atomic transactions ensure consistency
+- Better concurrency than Berkeley DB
+- Industry-standard, well-tested database engine
+
+### Database Contents
+
+Wallet databases store:
+
+1. **Descriptors**: Output descriptor definitions
+2. **Private keys**: Encrypted with wallet passphrase
+3. **Transactions**: Wallet transaction history
+4. **Metadata**: Labels, addresses, timestamps
+5. **Key origin**: Derivation path information
+
+## Wallet Encryption
+
+Wallet encryption protects private keys:
+
+### Encryption Process
+
+1. User provides passphrase
+2. Passphrase hashed to derive encryption key (using key stretching)
+3. Private keys encrypted with AES-256-CBC
+4. Keypool flushed and regenerated
+5. New HD seed generated if upgrading from non-encrypted
+
+<Warning>
+After encryption, create a new backup immediately. The previous backup will not work with the encrypted wallet's new keypool.
+</Warning>
+
+### What Gets Encrypted
+
+**Encrypted**:
+- Private keys
+- HD seed
+- Key metadata (derivation paths)
+
+**Not Encrypted**:
+- Public keys and addresses
+- Transaction history
+- Labels and metadata
+- Descriptors themselves
+
+### Unlocking
+
+Encrypted wallets must be unlocked for operations requiring private keys:
+
+```bash
+bitcoin-cli walletpassphrase "passphrase" 300  # Unlock for 5 minutes
+```
+
+<Note>
+The passphrase is not the seed phrase. If you lose the passphrase, your funds are permanently inaccessible.
+</Note>
+
+## Wallet Types
+
+### Default Wallet
+
+Standard wallet with private keys:
+
+```bash
+bitcoin-cli createwallet "mywallet"
+```
+
+### Watch-Only Wallet
+
+Tracks addresses without private keys:
+
+```bash
+bitcoin-cli createwallet "watch" false false "" true
+```
+
+Useful for:
+- Cold storage monitoring
+- Hardware wallet integration
+- Payment tracking without spending capability
+
+### Blank Wallet
+
+Created without keys or seed:
+
+```bash
+bitcoin-cli createwallet "blank" false true
+```
+
+Useful for:
+- Importing existing descriptors
+- Custom wallet setup
+- Migration scenarios
+
+### Disable Private Keys
+
+Wallets can have private keys disabled permanently:
+
+```bash
+bitcoin-cli createwallet "noprivkeys" true
+```
+
+## ScriptPubKeyMan
+
+The `ScriptPubKeyMan` class manages scripts and keys:
+
+### Descriptor SPKMan
+
+Manages keys for a single descriptor:
+
+- One SPKMan per descriptor
+- Handles key derivation
+- Manages key ranges
+- Implements signing logic
+
+### Separation of Concerns
+
+Descriptor wallets may have multiple SPKMs:
+
+- **Receiving addresses**: External chain descriptor
+- **Change addresses**: Internal chain descriptor  
+- **Watch-only scripts**: Separate watch-only wallet
+- **Unsolvable scripts**: Separate solvables wallet
+
+## Keypool and TopUp
+
+The keypool pre-generates addresses:
+
+```cpp
+DEFAULT_KEYPOOL_SIZE = 1000
+```
+
+- Maintains pool of unused addresses
+- Automatically topped up as addresses are used
+- Ensures backups remain valid
+- Can be configured with `-keypool` option
+
+<Tip>
+Larger keypools mean fewer topup operations but more data in backups. The default 1000 is suitable for most users.
+</Tip>
+
+## Wallet Migration
+
+Migrating from legacy to descriptor wallets:
+
+```bash
+bitcoin-cli migratewallet "legacy-wallet"
+```
+
+### Migration Results
+
+**Primary wallet**: Contains all private keys
+- Uses BIP 44/49/84/86 derivation paths
+- Imports all existing keys
+
+**_watchonly wallet** (if applicable):
+- Contains watch-only scripts
+- No private keys
+
+**_solvables wallet** (if applicable):
+- Scripts the wallet knows but doesn't watch
+- Rare edge cases
+
+### Backup Created
+
+Automatic backup at: `<wallet-name>-<timestamp>.legacy.bak`
+
+<Warning>
+Test migration on a copy of your wallet first. While migration is designed to be safe, having a backup provides additional security.
+</Warning>
+
+## Backup and Recovery
+
+### Backup Best Practices
+
+1. **Initial backup**: After wallet creation
+2. **After encryption**: When passphrase is set/changed
+3. **Regular backups**: Weekly or after significant transactions (for metadata)
+
+### What Backups Preserve
+
+**HD wallets** (0.13+):
+- One backup recovers all future addresses
+- Metadata may be lost if backup is old
+- Passphrase required if wallet is encrypted
+
+**Legacy wallets**:
+- Backup every 100 addresses used
+- Frequent backups critical
+
+### Recovery Process
+
+```bash
+bitcoin-cli restorewallet "restored-wallet" "/path/to/backup.dat"
+```
+
+After restore:
+1. Wallet rescans blockchain for transactions
+2. Metadata restored from backup (labels, timestamps)
+3. Balance should match pre-backup state
+
+## External Signers
+
+Bitcoin Core supports external signing devices:
+
+- Hardware wallets via HWI (Hardware Wallet Interface)
+- External signing processes
+- Watch-only wallet + signing device architecture
+- Specified with `-signer` option
+
+## Related Concepts
+
+- [Transactions](/concepts/transactions) - Creating and signing transactions
+- [Consensus Rules](/concepts/consensus) - Script validation and timelock rules

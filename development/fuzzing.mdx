@@ -1,0 +1,397 @@
+---
+title: Fuzz Testing
+description: Comprehensive guide to fuzzing Bitcoin Core using libFuzzer, AFL++, and Honggfuzz
+---
+
+## Overview
+
+Fuzzing is an automated testing technique that finds bugs by providing random or mutated inputs to code. Bitcoin Core supports multiple fuzzing engines:
+
+- **libFuzzer** - LLVM's coverage-guided fuzzer (recommended)
+- **AFL++** - Advanced fuzzing with instrumentation
+- **Honggfuzz** - Security-oriented fuzzer
+
+Fuzzing is particularly effective at finding:
+- Memory safety issues
+- Assertion failures
+- Crashes and undefined behavior
+- Edge cases not covered by unit tests
+- Denial-of-service vulnerabilities
+
+<Note>
+Benchmarks are ill-suited for denial-of-service testing as they use restricted input sets. Fuzz tests explore the full input space and are better suited for this purpose.
+</Note>
+
+## Quick Start with libFuzzer
+
+### Build and Run
+
+```sh
+git clone https://github.com/bitcoin/bitcoin
+cd bitcoin/
+cmake --preset=libfuzzer
+cmake --build build_fuzz
+FUZZ=process_message build_fuzz/bin/fuzz
+# abort fuzzing using ctrl-c
+```
+
+For fuzzing without sanitizers (increased throughput):
+
+```sh
+cmake --preset=libfuzzer-nosan
+cmake --build build_fuzz
+```
+
+### Fuzz Runner Script
+
+Execute all fuzz targets using the runner:
+
+```sh
+./build_fuzz/test/fuzz/test_runner.py --help
+```
+
+## Understanding Fuzz Output
+
+### libFuzzer Output
+
+The fuzzer outputs `NEW` when it creates an input that covers new code areas:
+
+```
+INFO: Seed: 840522292
+INFO: Loaded 1 modules   (424174 inline 8-bit counters)
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: A corpus is not provided, starting from an empty corpus
+#2      INITED cov: 94 ft: 95 corp: 1/1b exec/s: 0 rss: 150Mb
+#3      NEW    cov: 95 ft: 96 corp: 2/3b lim: 4 exec/s: 0 rss: 150Mb L: 2/2 MS: 1 InsertByte-
+#4      NEW    cov: 96 ft: 98 corp: 3/7b lim: 4 exec/s: 0 rss: 150Mb L: 4/4 MS: 1 CrossOver-
+```
+
+Key metrics:
+- **cov**: Code coverage (edges covered)
+- **ft**: Feature count (more detailed coverage)
+- **corp**: Corpus size (number of inputs / total bytes)
+- **exec/s**: Executions per second
+- **rss**: Resident set size (memory usage)
+
+See [libFuzzer documentation](https://llvm.org/docs/LibFuzzer.html) for complete output interpretation.
+
+## Using Corpus Directories
+
+Specify a corpus directory to save coverage-increasing inputs:
+
+```sh
+mkdir -p process_message-seeded-from-thin-air/
+FUZZ=process_message build_fuzz/bin/fuzz process_message-seeded-from-thin-air/
+```
+
+The fuzzer saves new interesting inputs to this directory:
+
+```sh
+ls process_message-seeded-from-thin-air/
+# Shows various input files with hash names
+
+cat --show-nonprinting process_message-seeded-from-thin-air/349ac589fc...
+# Displays the actual test input that increased coverage
+```
+
+## Fuzzing Harnesses
+
+Available harnesses are in [`src/test/fuzz/`](https://github.com/bitcoin/bitcoin/tree/master/src/test/fuzz).
+
+**Example**: [`process_message`](https://github.com/bitcoin/bitcoin/blob/master/src/test/fuzz/process_message.cpp) - Fuzzes the `ProcessMessage()` function in `net_processing`.
+
+List all available targets:
+
+```sh
+ls src/test/fuzz/
+```
+
+## Passing bitcoind Arguments
+
+Fuzz tests can accept bitcoind arguments (some may ignore them):
+
+```sh
+FUZZ=address_deserialize build_fuzz/bin/fuzz -runs=1 \
+    fuzz_corpora/address_deserialize --checkaddrman=5 --printtoconsole=1
+```
+
+Use `--` to distinguish fuzzer args from bitcoind args.
+
+## Fuzzing Corpora
+
+The official seed corpora collection is at [`bitcoin-core/qa-assets`](https://github.com/bitcoin-core/qa-assets).
+
+### Using qa-assets
+
+```sh
+git clone --depth=1 https://github.com/bitcoin-core/qa-assets
+FUZZ=process_message build_fuzz/bin/fuzz qa-assets/fuzz_corpora/process_message/
+```
+
+Output:
+
+```
+INFO: Seed: 1346407872
+INFO:      991 files found in qa-assets/fuzz_corpora/process_message/
+INFO: seed corpus: files: 991 min: 1b max: 1858b total: 288291b rss: 150Mb
+#993    INITED cov: 7063 ft: 8236 corp: 25/3821b exec/s: 0 rss: 181Mb
+…
+```
+
+<Tip>
+Starting with a good corpus significantly improves fuzzing efficiency by providing known-good inputs.
+</Tip>
+
+## Sanitizers
+
+### Address and Undefined Behavior Sanitizers
+
+Default libFuzzer preset includes sanitizers:
+
+```sh
+cmake --preset=libfuzzer  # Includes -DSANITIZERS=address,fuzzer,undefined
+```
+
+### Memory Sanitizer (MSan)
+
+MSan requires all linked code to be instrumented:
+
+1. Compile `clang` from source
+2. Use it to compile an instrumented libc++
+3. Build Bitcoin Core dependencies from source with instrumentation
+4. Build the fuzz binary
+
+See the MSan CI job for a working example.
+
+**Alternative**: Use Valgrind, which doesn't require custom libc++.
+
+### Running Without Sanitizers
+
+For increased throughput (finding new coverage faster):
+
+```sh
+cmake --preset=libfuzzer-nosan
+cmake --build build_fuzz
+```
+
+<Note>
+Fuzzing with sanitizers is good for finding bugs. Fuzzing without sanitizers is good for finding new coverage. A good strategy: run long sessions without sanitizers to find coverage, then merge inputs and test with sanitizers to find bugs.
+</Note>
+
+## Reproducing CI Crashes
+
+### Steps to Reproduce
+
+1. Update qa-assets:
+   ```sh
+   cd qa-assets
+   git pull
+   ```
+
+2. Locate crash case from CI output:
+   ```
+   Test unit written to ./crash-1bc91feec9fc00b107d97dc225a9f2cdaa078eb6
+   ```
+
+3. Compile with sanitizers if needed
+
+4. Run fuzzer with the crash input:
+   ```sh
+   FUZZ=process_message build_fuzz/bin/fuzz \
+       qa-assets/fuzz_corpora/process_message/1bc91feec9fc00b107d97dc225a9f2cdaa078eb6
+   ```
+
+### Using Base64 Encoded Input
+
+If the file isn't in qa-assets, use the base64 from CI logs:
+
+```sh
+echo "Nb6Fc/97AACAAAD/ewAAgAAAAIAAAACAAAAAoA==" | base64 --decode > \
+    qa-assets/fuzz_corpora/process_message/1bc91feec9fc00b107d97dc225a9f2cdaa078eb6
+```
+
+## Contributing Coverage
+
+If you find coverage-increasing inputs, submit them to [`bitcoin-core/qa-assets`](https://github.com/bitcoin-core/qa-assets).
+
+<Tip>
+Every PR against Bitcoin Core is automatically tested against all qa-assets inputs. Contributing new inputs helps make Bitcoin Core more robust.
+</Tip>
+
+## Building Fuzz Tests
+
+Three ways to build fuzz tests:
+
+### 1. BUILD_FOR_FUZZING=ON (Standard)
+
+```sh
+cmake -B build -DBUILD_FOR_FUZZING=ON
+```
+
+- Forces on fuzz determinism
+- Skips proof-of-work checks
+- Disables random number seeding  
+- Disables clock time
+- `Assume()` checks abort on failure
+- Only fuzz binary can be built (other binaries disabled)
+
+**Use for**: Normal fuzzing and generating new inputs
+
+### 2. BUILD_FUZZ_BINARY=ON with Debug (Optional Determinism)
+
+```sh
+cmake -B build -DBUILD_FUZZ_BINARY=ON -DCMAKE_BUILD_TYPE=Debug
+```
+
+- `Assume()` checks abort on failure
+- Determinism enabled by default
+- Can disable determinism with `FUZZ_NONDETERMINISM` environment variable
+- Allows non-fuzz binaries to coexist
+
+**Use for**: Reproducing fuzz failures in normal builds
+
+### 3. BUILD_FUZZ_BINARY=ON with Release (Compile-only)
+
+```sh
+cmake -B build -DBUILD_FUZZ_BINARY=ON -DCMAKE_BUILD_TYPE=Release
+```
+
+- Fuzz binary builds but refuses to run
+- Determinism forced off
+- `Assume()` checks don't abort
+
+**Use for**: Ensuring fuzz tests compile and link
+
+## Coverage Reports
+
+Generate fuzz coverage reports with Clang:
+
+```sh
+# Build for fuzz coverage
+cmake -B build \
+   -DCMAKE_C_COMPILER="clang" \
+   -DCMAKE_CXX_COMPILER="clang++" \
+   -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+   -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+   -DBUILD_FOR_FUZZING=ON
+cmake --build build
+
+# Run fuzz tests
+LLVM_PROFILE_FILE="$(pwd)/build/raw_profile_data/txorphan.profraw" \
+    ./build/test/fuzz/test_runner.py ../qa-assets/fuzz_corpora txorphan
+
+# Merge profiles
+llvm-profdata merge build/raw_profile_data/*.profraw -o build/coverage.profdata
+
+# Generate report
+llvm-cov show --object=build/bin/fuzz \
+    --instr-profile=build/coverage.profdata \
+    --format=html --output-dir=build/coverage_report
+```
+
+View at `build/coverage_report/index.html`.
+
+See also: [Developer Notes - Compiling for Fuzz Coverage](/development/developer-notes#compiling-for-fuzz-coverage)
+
+## Alternative Fuzzing Engines
+
+### AFL++ (American Fuzzy Lop)
+
+```sh
+git clone https://github.com/bitcoin/bitcoin
+cd bitcoin/
+git clone https://github.com/AFLplusplus/AFLplusplus
+make -C AFLplusplus/ source-only
+
+cmake -B build_fuzz \
+   -DCMAKE_C_COMPILER="$(pwd)/AFLplusplus/afl-clang-lto" \
+   -DCMAKE_CXX_COMPILER="$(pwd)/AFLplusplus/afl-clang-lto++" \
+   -DBUILD_FOR_FUZZING=ON
+cmake --build build_fuzz
+
+mkdir -p inputs/ outputs/
+echo A > inputs/thin-air-input
+FUZZ=bech32 ./AFLplusplus/afl-fuzz -i inputs/ -o outputs/ -- build_fuzz/bin/fuzz
+```
+
+Read [AFL++ documentation](https://github.com/AFLplusplus/AFLplusplus) for advanced usage.
+
+### Honggfuzz
+
+```sh
+git clone https://github.com/bitcoin/bitcoin
+cd bitcoin/
+git clone https://github.com/google/honggfuzz
+cd honggfuzz/ && make && cd ..
+
+cmake -B build_fuzz \
+   -DCMAKE_C_COMPILER="$(pwd)/honggfuzz/hfuzz_cc/hfuzz-clang" \
+   -DCMAKE_CXX_COMPILER="$(pwd)/honggfuzz/hfuzz_cc/hfuzz-clang++" \
+   -DBUILD_FOR_FUZZING=ON \
+   -DSANITIZERS=address,undefined
+cmake --build build_fuzz
+
+mkdir -p inputs/
+FUZZ=process_message ./honggfuzz/honggfuzz -i inputs/ -- build_fuzz/bin/fuzz
+```
+
+Read [Honggfuzz documentation](https://github.com/google/honggfuzz/blob/master/docs/USAGE.md) for more information.
+
+## OSS-Fuzz Integration
+
+Bitcoin Core participates in Google's [OSS-Fuzz](https://github.com/google/oss-fuzz/tree/master/projects/bitcoin-core) program.
+
+**Resources**:
+- [Publicly disclosed vulnerabilities](https://issues.oss-fuzz.com/issues?q=bitcoin-core%20status:open)
+- [Coverage report](https://oss-fuzz.com/coverage-report/job/libfuzzer_asan_bitcoin-core/latest)
+
+<Note>
+Bitcoin Core follows its own [security disclosure policy](https://bitcoincore.org/en/security-advisories/), which may differ from Google's standard 90-day disclosure window.
+</Note>
+
+## macOS Notes
+
+Fuzzing support on macOS is not officially maintained.
+
+**Recommendation**: Fuzz on Linux for best results. Use Docker or a virtual machine on macOS.
+
+**Reproducing crashes on macOS**: Build the fuzz binary without a specific fuzzing engine:
+
+```sh
+cmake -B build -DBUILD_FUZZ_BINARY=ON -DCMAKE_BUILD_TYPE=Debug
+```
+
+## External Resources
+
+- [Google Fuzzing Overview](https://github.com/google/fuzzing/)
+- [Bitcoin Core Fuzzing Paper (2021)](https://agroce.github.io/bitcoin_report.pdf)
+- [Writing Fuzzer-Friendly Code](https://blog.regehr.org/archives/1687) by John Regehr
+- [libFuzzer Documentation](https://llvm.org/docs/LibFuzzer.html)
+- [AFL++ Documentation](https://github.com/AFLplusplus/AFLplusplus/blob/stable/docs/fuzzing_in_depth.md)
+- [Honggfuzz Documentation](https://github.com/google/honggfuzz/blob/master/docs/USAGE.md)
+
+## Best Practices
+
+### Fuzzing Strategy
+
+1. **Start with corpus**: Use qa-assets seed corpus for better initial coverage
+2. **Run long sessions**: Fuzzing may need days and millions of executions to reach deep targets
+3. **Alternate modes**: Periodically switch between sanitizer and non-sanitizer builds
+4. **Merge corpora**: Regularly merge new inputs back to qa-assets
+5. **Focus on targets**: Prioritize fuzzing of security-critical components
+
+### Writing Fuzz Harnesses
+
+- Keep harnesses simple and focused
+- Minimize state between iterations
+- Test one component or interface per harness
+- Add assertions to catch unexpected states
+- Avoid sources of non-determinism (random numbers, timestamps)
+- Document what the harness tests
+
+### Performance Tips
+
+- Use `-max_len` to limit input size for faster iteration
+- Run multiple instances in parallel (`-fork=N`)
+- Use corpus minimization (`-merge=1`)
+- Profile to ensure fuzzer spends time in target code, not setup

@@ -1,0 +1,412 @@
+---
+title: Installation
+description: Detailed installation instructions for Bitcoin Core on different platforms
+---
+
+Bitcoin Core can be installed via pre-built binaries or compiled from source. This guide covers both methods for major platforms.
+
+## Download pre-built binaries
+
+For most users, downloading pre-built binaries is the fastest and easiest option.
+
+<Steps>
+  <Step title="Visit the official download page">
+    Go to [bitcoincore.org/en/download](https://bitcoincore.org/en/download/) to download the latest stable release.
+  </Step>
+
+  <Step title="Verify the download">
+    <Warning>
+    Always verify downloads before installation. Bitcoin Core is security-critical software.
+    </Warning>
+
+    Verify signatures and checksums according to the instructions on the download page.
+  </Step>
+
+  <Step title="Install for your platform">
+    See platform-specific instructions below.
+  </Step>
+</Steps>
+
+## Platform-specific installation
+
+<Tabs>
+  <Tab title="Linux">
+    ### Install from binary
+
+    1. Download and extract the archive:
+    ```bash
+    tar -xzf bitcoin-*-x86_64-linux-gnu.tar.gz
+    cd bitcoin-*/
+    ```
+
+    2. Copy binaries to your PATH:
+    ```bash
+    sudo install -m 0755 -o root -g root -t /usr/local/bin bin/*
+    ```
+
+    3. Run Bitcoin Core:
+    ```bash
+    bitcoin-qt  # GUI version
+    # or
+    bitcoind    # Headless daemon
+    ```
+
+    ### System requirements
+
+    <Note>
+    Bitcoin Core requires several hundred gigabytes of disk space for the full blockchain. Ensure you have sufficient space before installation.
+    </Note>
+
+    **Disk space options:**
+    - Full node: 500+ GB (and growing)
+    - Pruned node: Configurable minimum (e.g., 50 GB with `prune=50000`)
+
+    ### Configuration location
+
+    Default data directory: `~/.bitcoin/`
+    Configuration file: `~/.bitcoin/bitcoin.conf`
+  </Tab>
+
+  <Tab title="macOS">
+    ### Install from DMG
+
+    <Steps>
+      <Step title="Download the DMG file">
+        Get the `.dmg` file from [bitcoincore.org/en/download](https://bitcoincore.org/en/download/)
+      </Step>
+
+      <Step title="Install the application">
+        1. Open the downloaded `.dmg` file
+        2. Drag Bitcoin Core to your Applications folder
+        3. Launch Bitcoin Core from Applications
+      </Step>
+
+      <Step title="First launch">
+        On first launch, macOS may require you to confirm opening the application from an identified developer.
+      </Step>
+    </Steps>
+
+    ### Command-line access
+
+    To access Bitcoin Core tools from the terminal:
+
+    ```bash
+    # Add to your PATH or create aliases
+    alias bitcoin-cli="/Applications/Bitcoin-Qt.app/Contents/MacOS/bitcoin-cli"
+    alias bitcoind="/Applications/Bitcoin-Qt.app/Contents/MacOS/bitcoind"
+    ```
+
+    ### Configuration location
+
+    Default data directory: `~/Library/Application Support/Bitcoin/`
+    Configuration file: `~/Library/Application Support/Bitcoin/bitcoin.conf`
+  </Tab>
+
+  <Tab title="Windows">
+    ### Install from installer
+
+    <Steps>
+      <Step title="Download the installer">
+        Get the `.exe` installer from [bitcoincore.org/en/download](https://bitcoincore.org/en/download/)
+      </Step>
+
+      <Step title="Run the installer">
+        Double-click the downloaded `.exe` file and follow the installation wizard.
+      </Step>
+
+      <Step title="Launch Bitcoin Core">
+        Start Bitcoin Core from the Start menu or desktop shortcut.
+      </Step>
+    </Steps>
+
+    ### Portable installation
+
+    Alternatively, download the `.zip` archive and extract to any directory:
+
+    1. Extract the archive
+    2. Run `bitcoin-qt.exe` (GUI) or `bitcoind.exe` (daemon)
+
+    ### Configuration location
+
+    Default data directory: `%LOCALAPPDATA%\Bitcoin\`
+    
+    Example: `C:\Users\username\AppData\Local\Bitcoin\bitcoin.conf`
+  </Tab>
+</Tabs>
+
+## Building from source
+
+For developers or users who want to build from source, Bitcoin Core supports multiple platforms.
+
+<Note>
+Building from source requires technical knowledge and several dependencies. Most users should use pre-built binaries.
+</Note>
+
+### Prerequisites
+
+All platforms require:
+- C++ compiler (see [dependencies.md](https://github.com/bitcoin/bitcoin/blob/master/doc/dependencies.md) for version requirements)
+- CMake 3.22 or later
+- Python 3
+
+### Build on Linux/Unix
+
+<Steps>
+  <Step title="Install dependencies">
+    **Ubuntu/Debian:**
+    ```bash
+    sudo apt-get install build-essential cmake pkgconf python3
+    sudo apt-get install libevent-dev libboost-dev libsqlite3-dev
+    ```
+
+    **For GUI support:**
+    ```bash
+    sudo apt-get install qt6-base-dev qt6-tools-dev qt6-l10n-tools \
+                         qt6-tools-dev-tools libgl-dev libqrencode-dev
+    ```
+
+    **For ZMQ support:**
+    ```bash
+    sudo apt-get install libzmq3-dev
+    ```
+  </Step>
+
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    cd bitcoin
+    ```
+  </Step>
+
+  <Step title="Configure and build">
+    ```bash
+    # Configure
+    cmake -B build
+
+    # See all options
+    cmake -B build -LH
+
+    # Build (use -j for parallel jobs)
+    cmake --build build -j$(nproc)
+
+    # Optional: Install
+    sudo cmake --install build
+    ```
+  </Step>
+</Steps>
+
+#### Build options
+
+<CodeGroup>
+```bash Disable wallet
+cmake -B build -DENABLE_WALLET=OFF
+```
+
+```bash Disable GUI
+cmake -B build -DBUILD_GUI=OFF
+```
+
+```bash Enable ZMQ
+cmake -B build -DWITH_ZMQ=ON
+```
+
+```bash Disable IPC
+cmake -B build -DENABLE_IPC=OFF
+```
+</CodeGroup>
+
+#### Memory-constrained systems
+
+<Tip>
+If you have limited RAM (less than 1.5 GB), use these compiler flags to reduce memory usage:
+</Tip>
+
+```bash
+cmake -B build -DCMAKE_CXX_FLAGS="--param ggc-min-expand=1 --param ggc-min-heapsize=32768"
+```
+
+Or reduce debug info:
+```bash
+cmake -B build -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g0"
+```
+
+### Build on macOS
+
+<Steps>
+  <Step title="Install Xcode Command Line Tools">
+    ```bash
+    xcode-select --install
+    ```
+    Click **Install** in the popup that appears.
+  </Step>
+
+  <Step title="Install Homebrew">
+    If not already installed, get Homebrew from [brew.sh](https://brew.sh)
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    brew install cmake boost pkgconf libevent capnp
+    ```
+
+    **For GUI support:**
+    ```bash
+    brew install qt@6
+    ```
+  </Step>
+
+  <Step title="Clone and build">
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    cd bitcoin
+    
+    cmake -B build
+    cmake --build build -j$(sysctl -n hw.ncpu)
+    ```
+  </Step>
+</Steps>
+
+<Note>
+macOS ships with a usable SQLite package, so you don't need to install it separately for wallet functionality.
+</Note>
+
+### Build on Windows
+
+Bitcoin Core can be built on Windows using several methods:
+
+#### Option 1: Windows Subsystem for Linux (WSL)
+
+<Steps>
+  <Step title="Install WSL">
+    Follow the [official WSL installation guide](https://learn.microsoft.com/en-us/windows/wsl/install)
+  </Step>
+
+  <Step title="Build in WSL">
+    Once WSL is set up, follow the Linux build instructions above.
+  </Step>
+</Steps>
+
+#### Option 2: Cross-compile from Linux
+
+You can cross-compile Windows binaries from Linux:
+
+```bash
+# Install cross-compilation toolchain
+sudo apt-get install g++-mingw-w64-x86-64-posix
+
+# Clone repository
+git clone https://github.com/bitcoin/bitcoin.git
+cd bitcoin
+
+# Build dependencies and Bitcoin Core
+gmake -C depends HOST=x86_64-w64-mingw32 -j$(nproc)
+cmake -B build --toolchain depends/x86_64-w64-mingw32/toolchain.cmake
+cmake --build build -j$(nproc)
+```
+
+#### Option 3: Microsoft Visual Studio
+
+See [build-windows-msvc.md](https://github.com/bitcoin/bitcoin/blob/master/doc/build-windows-msvc.md) for detailed instructions on building with Visual Studio.
+
+<Warning>
+For WSL builds, the Bitcoin Core source path **must** be in the default WSL filesystem (e.g., `/usr/src/bitcoin`), not under `/mnt/` on the Windows filesystem, or dependency scripts will fail.
+</Warning>
+
+## Post-installation
+
+### Create a configuration file
+
+Create `bitcoin.conf` in your data directory to customize Bitcoin Core:
+
+```ini
+# Network options
+testnet=0  # Use mainnet (default)
+# testnet=1  # Use testnet
+# signet=1   # Use signet
+# regtest=1  # Use regression test mode
+
+# Connection options
+maxconnections=125
+maxuploadtarget=5000  # Limit upload to 5GB/day
+
+# RPC options
+server=1  # Enable RPC server
+rpcauth=user:salt$hash  # Use rpcauth for security
+
+# Storage options
+prune=50000  # Prune blockchain to ~50GB
+# prune=0    # Store full blockchain (default)
+
+# Performance
+dbcache=4000  # Database cache size in MiB
+```
+
+<Tip>
+Use `contrib/devtools/gen-bitcoin-conf.sh` to generate an example configuration file with all available options after building from source.
+</Tip>
+
+### Verify installation
+
+Test your installation:
+
+<CodeGroup>
+```bash Check version
+bitcoind --version
+```
+
+```bash Run in regtest mode
+bitcoind -regtest -daemon
+bitcoin-cli -regtest getblockchaininfo
+bitcoin-cli -regtest stop
+```
+</CodeGroup>
+
+## Storage considerations
+
+### Full node
+
+- **Current size**: 500+ GB (as of 2024)
+- **Growth rate**: ~50-100 GB per year
+- **Recommended**: 1 TB+ for future growth
+
+### Pruned node
+
+Reduce storage requirements by pruning old block data:
+
+```ini
+# bitcoin.conf
+prune=50000  # Keep ~50 GB of recent blocks
+```
+
+<Note>
+With pruning enabled, you can still validate new transactions and participate in the network, but you cannot serve historical blockchain data to other nodes.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Configuration guide"
+    icon="gear"
+  >
+    Learn about bitcoin.conf options and network settings
+  </Card>
+  <Card
+    title="Security best practices"
+    icon="shield"
+  >
+    Secure your Bitcoin Core installation
+  </Card>
+  <Card
+    title="RPC authentication"
+    icon="key"
+  >
+    Set up secure RPC access with rpcauth
+  </Card>
+  <Card
+    title="Running a node"
+    icon="server"
+  >
+    Best practices for operating a Bitcoin node
+  </Card>
+</CardGroup>

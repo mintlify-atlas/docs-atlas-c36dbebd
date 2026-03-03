@@ -1,0 +1,494 @@
+---
+title: "Blockchain RPC Methods"
+description: "Query blockchain data, blocks, transactions, and chain state using Bitcoin Core RPC methods"
+---
+
+# Blockchain RPC Methods
+
+Blockchain RPCs provide access to Bitcoin blockchain data, including blocks, transactions, chain state, and UTXO information.
+
+## Chain Information
+
+### getblockchaininfo
+
+Returns comprehensive information about the current state of the blockchain.
+
+```bash
+curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getblockchaininfo", "params": []}' \
+  -H 'content-type: application/json' http://localhost:8332/
+```
+
+<ResponseField name="chain" type="string">
+  Current network name (main, test, signet, regtest)
+</ResponseField>
+
+<ResponseField name="blocks" type="number">
+  Current number of blocks processed
+</ResponseField>
+
+<ResponseField name="headers" type="number">
+  Current number of headers validated
+</ResponseField>
+
+<ResponseField name="bestblockhash" type="string">
+  Hash of the best (tip) block
+</ResponseField>
+
+<ResponseField name="difficulty" type="number">
+  Current proof-of-work difficulty
+</ResponseField>
+
+<ResponseField name="time" type="number">
+  Block time of the best block (Unix timestamp)
+</ResponseField>
+
+<ResponseField name="mediantime" type="number">
+  Median time for the current best block
+</ResponseField>
+
+<ResponseField name="verificationprogress" type="number">
+  Estimate of verification progress (0 to 1)
+</ResponseField>
+
+<ResponseField name="chainwork" type="string">
+  Total amount of work in active chain (hex)
+</ResponseField>
+
+<ResponseField name="size_on_disk" type="number">
+  Estimated size of the block and undo files on disk
+</ResponseField>
+
+<ResponseField name="pruned" type="boolean">
+  Whether the blocks are subject to pruning
+</ResponseField>
+
+<ResponseField name="warnings" type="string">
+  Any network and blockchain warnings
+</ResponseField>
+
+### getblockcount
+
+Returns the height of the most-work fully-validated chain.
+
+```bash
+bitcoin-cli getblockcount
+```
+
+<ResponseField name="result" type="number">
+  The current block count (genesis block has height 0)
+</ResponseField>
+
+### getbestblockhash
+
+Returns the hash of the best (tip) block in the most-work fully-validated chain.
+
+```bash
+bitcoin-cli getbestblockhash
+```
+
+<ResponseField name="result" type="string">
+  The block hash (hex-encoded)
+</ResponseField>
+
+### getdifficulty
+
+Returns the proof-of-work difficulty as a multiple of the minimum difficulty.
+
+```bash
+bitcoin-cli getdifficulty
+```
+
+<ResponseField name="result" type="number">
+  The current difficulty
+</ResponseField>
+
+## Block Operations
+
+### getblock
+
+Returns information about a block at the given hash or height.
+
+<ParamField name="blockhash" type="string" required>
+  The block hash (hex string)
+</ParamField>
+
+<ParamField name="verbosity" type="number" default="1">
+  - 0: Raw block data (hex)
+  - 1: Block object with transaction IDs
+  - 2: Block object with full transaction details
+  - 3: Block object with full transaction and prevout details
+</ParamField>
+
+```bash
+# Get block with transaction IDs
+bitcoin-cli getblock "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
+
+# Get block with full transaction details
+bitcoin-cli getblock "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09" 2
+```
+
+<ResponseField name="hash" type="string">
+  Block hash (same as provided)
+</ResponseField>
+
+<ResponseField name="confirmations" type="number">
+  Number of confirmations (-1 if block is not in main chain)
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Block height
+</ResponseField>
+
+<ResponseField name="version" type="number">
+  Block version
+</ResponseField>
+
+<ResponseField name="merkleroot" type="string">
+  Merkle root hash
+</ResponseField>
+
+<ResponseField name="time" type="number">
+  Block time (Unix timestamp)
+</ResponseField>
+
+<ResponseField name="mediantime" type="number">
+  Median time past
+</ResponseField>
+
+<ResponseField name="nonce" type="number">
+  Block nonce
+</ResponseField>
+
+<ResponseField name="bits" type="string">
+  Difficulty target bits (hex)
+</ResponseField>
+
+<ResponseField name="difficulty" type="number">
+  Difficulty
+</ResponseField>
+
+<ResponseField name="chainwork" type="string">
+  Expected chain work (hex)
+</ResponseField>
+
+<ResponseField name="tx" type="array">
+  Transaction IDs (verbosity 1) or full transaction objects (verbosity 2+)
+</ResponseField>
+
+<ResponseField name="previousblockhash" type="string">
+  Hash of previous block
+</ResponseField>
+
+<ResponseField name="nextblockhash" type="string">
+  Hash of next block (if available)
+</ResponseField>
+
+### getblockhash
+
+Returns the hash of the block at the given height.
+
+<ParamField name="height" type="number" required>
+  The block height
+</ParamField>
+
+```bash
+bitcoin-cli getblockhash 1000
+```
+
+<ResponseField name="result" type="string">
+  The block hash at the specified height
+</ResponseField>
+
+### getblockheader
+
+Returns information about a block header.
+
+<ParamField name="blockhash" type="string" required>
+  The block hash
+</ParamField>
+
+<ParamField name="verbose" type="boolean" default="true">
+  - true: Returns JSON object
+  - false: Returns hex-encoded data
+</ParamField>
+
+```bash
+bitcoin-cli getblockheader "00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09"
+```
+
+### getblockstats
+
+Computes per-block statistics for a given window.
+
+<ParamField name="hash_or_height" type="string | number" required>
+  The block hash or height
+</ParamField>
+
+<ParamField name="stats" type="array">
+  Optional array of stats to return (returns all if omitted)
+</ParamField>
+
+```bash
+bitcoin-cli getblockstats 1000 '["avgfee", "avgfeerate", "txs"]'
+```
+
+<ResponseField name="avgfee" type="number">
+  Average fee in the block
+</ResponseField>
+
+<ResponseField name="avgfeerate" type="number">
+  Average feerate (satoshis per virtual byte)
+</ResponseField>
+
+<ResponseField name="avgtxsize" type="number">
+  Average transaction size
+</ResponseField>
+
+<ResponseField name="blockhash" type="string">
+  Block hash
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Block height
+</ResponseField>
+
+<ResponseField name="maxfee" type="number">
+  Maximum fee in the block
+</ResponseField>
+
+<ResponseField name="maxfeerate" type="number">
+  Maximum feerate
+</ResponseField>
+
+<ResponseField name="mintxsize" type="number">
+  Minimum transaction size
+</ResponseField>
+
+<ResponseField name="totalfee" type="number">
+  Total fees in the block
+</ResponseField>
+
+<ResponseField name="txs" type="number">
+  Number of transactions (excluding coinbase)
+</ResponseField>
+
+## Transaction Operations
+
+### gettxout
+
+Returns details about an unspent transaction output (UTXO).
+
+<ParamField name="txid" type="string" required>
+  The transaction ID
+</ParamField>
+
+<ParamField name="n" type="number" required>
+  The output index (vout)
+</ParamField>
+
+<ParamField name="include_mempool" type="boolean" default="true">
+  Whether to include the mempool
+</ParamField>
+
+```bash
+bitcoin-cli gettxout "txid" 1
+```
+
+<ResponseField name="bestblock" type="string">
+  Hash of the block at tip of chain
+</ResponseField>
+
+<ResponseField name="confirmations" type="number">
+  Number of confirmations
+</ResponseField>
+
+<ResponseField name="value" type="number">
+  Transaction value in BTC
+</ResponseField>
+
+<ResponseField name="scriptPubKey" type="object">
+  Script pubkey information including asm, hex, type, and address
+</ResponseField>
+
+<ResponseField name="coinbase" type="boolean">
+  Whether this is a coinbase transaction
+</ResponseField>
+
+<Note>
+Returns `null` if the transaction output is spent or doesn't exist.
+</Note>
+
+### gettxoutsetinfo
+
+Returns statistics about the unspent transaction output set.
+
+<ParamField name="hash_type" type="string" default="hash_serialized_3">
+  Hash type: hash_serialized_3, muhash, none
+</ParamField>
+
+<ParamField name="hash_or_height" type="string | number">
+  Block hash or height to compute stats for (tip if omitted)
+</ParamField>
+
+<ParamField name="use_index" type="boolean" default="true">
+  Use coinstatsindex if available
+</ParamField>
+
+```bash
+bitcoin-cli gettxoutsetinfo
+```
+
+<ResponseField name="height" type="number">
+  Block height
+</ResponseField>
+
+<ResponseField name="bestblock" type="string">
+  Best block hash
+</ResponseField>
+
+<ResponseField name="txouts" type="number">
+  Number of unspent transaction outputs
+</ResponseField>
+
+<ResponseField name="total_amount" type="number">
+  Total amount in BTC
+</ResponseField>
+
+### getrawtransaction
+
+Returns raw transaction data.
+
+<ParamField name="txid" type="string" required>
+  The transaction ID
+</ParamField>
+
+<ParamField name="verbose" type="boolean" default="false">
+  - false: Return hex string
+  - true: Return JSON object
+</ParamField>
+
+<ParamField name="blockhash" type="string">
+  Block hash to look in (if transaction not in mempool)
+</ParamField>
+
+```bash
+# Get raw transaction as hex
+bitcoin-cli getrawtransaction "txid"
+
+# Get detailed transaction information
+bitcoin-cli getrawtransaction "txid" true
+```
+
+## Chain State Queries
+
+### getchaintips
+
+Returns information about all known chain tips.
+
+```bash
+bitcoin-cli getchaintips
+```
+
+Returns array of chain tips with:
+
+<ResponseField name="height" type="number">
+  Height of the chain tip
+</ResponseField>
+
+<ResponseField name="hash" type="string">
+  Block hash of the tip
+</ResponseField>
+
+<ResponseField name="branchlen" type="number">
+  Length of branch connecting tip to main chain (0 for main chain)
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Status: active, valid-fork, valid-headers, headers-only, invalid
+</ResponseField>
+
+### getchaintxstats
+
+Computes statistics about the total number and rate of transactions in the chain.
+
+<ParamField name="nblocks" type="number" default="one month">
+  Number of blocks to average over
+</ParamField>
+
+<ParamField name="blockhash" type="string">
+  Hash of block to end calculation at (tip if omitted)
+</ParamField>
+
+```bash
+bitcoin-cli getchaintxstats 2016
+```
+
+### verifychain
+
+Verifies blockchain database integrity.
+
+<ParamField name="checklevel" type="number" default="3">
+  Check level (0-4, higher = more thorough)
+</ParamField>
+
+<ParamField name="nblocks" type="number" default="6">
+  Number of blocks to check
+</ParamField>
+
+```bash
+bitcoin-cli verifychain 4 1000
+```
+
+<ResponseField name="result" type="boolean">
+  Whether verification passed
+</ResponseField>
+
+## Waiting for Blocks
+
+### waitfornewblock
+
+Waits for a new block and returns useful info about it.
+
+<ParamField name="timeout" type="number" default="0">
+  Time in milliseconds to wait (0 = no timeout)
+</ParamField>
+
+<ParamField name="current_tip" type="string">
+  Waits for chain tip to differ from this hash
+</ParamField>
+
+```bash
+bitcoin-cli -rpcclienttimeout=0 waitfornewblock
+```
+
+### waitforblock
+
+Waits for a specific block hash and returns useful info.
+
+<ParamField name="blockhash" type="string" required>
+  Block hash to wait for
+</ParamField>
+
+<ParamField name="timeout" type="number" default="0">
+  Time in milliseconds to wait
+</ParamField>
+
+```bash
+bitcoin-cli waitforblock "0000000000000000000065bda8f8a88f2e1e00d9a6887a43d640e52a4c7660f2" 1000
+```
+
+### waitforblockheight
+
+Waits for blockchain to reach a specific height.
+
+<ParamField name="height" type="number" required>
+  Block height to wait for
+</ParamField>
+
+<ParamField name="timeout" type="number" default="0">
+  Time in milliseconds to wait
+</ParamField>
+
+```bash
+bitcoin-cli waitforblockheight 700000 60000
+```

@@ -1,0 +1,264 @@
+---
+title: Initial Block Download
+description: Understanding the IBD process and what to expect during blockchain synchronization
+---
+
+Initial Block Download (IBD) is the process by which a new Bitcoin Core node downloads and validates the entire blockchain history from the genesis block to the current tip.
+
+## What is IBD?
+
+When you first start Bitcoin Core, it needs to:
+
+1. Download all blocks from the network
+2. Validate each transaction in every block
+3. Build the UTXO (Unspent Transaction Output) database
+4. Verify the proof-of-work for each block
+
+<Info>
+Bitcoin Core validates the entire blockchain history, ensuring that every transaction and block follows consensus rules. This makes it a fully validating node.
+</Info>
+
+## How Long Does IBD Take?
+
+The synchronization time varies significantly based on:
+
+- **Hardware**: CPU speed, disk I/O performance, available RAM
+- **Network**: Download speed and latency
+- **Configuration**: dbcache size and other settings
+
+<Warning>
+Depending on your system, IBD can take anywhere from a few hours to several days or more. This is normal and expected.
+</Warning>
+
+### Typical Timeline
+
+- **Fast system** (SSD, 16GB+ RAM, fast internet): 4-8 hours
+- **Average system** (SSD, 8GB RAM, moderate internet): 12-24 hours  
+- **Slower system** (HDD, 4GB RAM, slow internet): Several days
+
+## Monitoring IBD Progress
+
+Check synchronization status using the RPC interface:
+
+```bash
+bitcoin-cli getblockchaininfo
+```
+
+Key fields to monitor:
+
+```json
+{
+  "blocks": 825000,
+  "headers": 825500,
+  "verificationprogress": 0.9994,
+  "initialblockdownload": true
+}
+```
+
+- **blocks**: Number of validated blocks
+- **headers**: Number of downloaded block headers
+- **verificationprogress**: Estimated completion (0.0 to 1.0)
+- **initialblockdownload**: Whether still in IBD mode
+
+<Tip>
+Headers download first and quickly. Block validation follows and takes much longer. Don't worry if headers reach the tip while blocks lag behind.
+</Tip>
+
+## IBD Phases
+
+<Steps>
+  <Step title="Header Download">
+    Bitcoin Core first downloads all block headers from peers. This is fast and completes in minutes.
+    
+    ```bash
+    # Check header count
+    bitcoin-cli getblockchaininfo | grep headers
+    ```
+  </Step>
+
+  <Step title="Block Download">
+    Full blocks are downloaded from peers. The node requests blocks from multiple peers in parallel.
+    
+    You'll see rapid progress initially, then it slows down as blocks become larger and more complex.
+  </Step>
+
+  <Step title="Block Validation">
+    Each block is validated:
+    - Verify proof-of-work
+    - Validate all transactions
+    - Check consensus rules
+    - Update the UTXO database
+    
+    This is the most CPU and disk-intensive phase.
+  </Step>
+
+  <Step title="UTXO Database Building">
+    The UTXO set (all spendable outputs) is built incrementally during validation.
+    
+    The UTXO database is critical for validating new transactions and blocks.
+  </Step>
+</Steps>
+
+## Storage Requirements
+
+<Warning>
+Ensure you have sufficient disk space before starting IBD:
+
+- **Full node**: ~600 GB (and growing)
+- **Pruned node**: ~10 GB minimum (550 MB minimum with manual pruning)
+- **During IBD**: Additional temporary space may be needed
+</Warning>
+
+See the [Pruning documentation](/operations/pruning) to reduce storage requirements.
+
+## Network Usage During IBD
+
+IBD requires downloading the entire blockchain:
+
+- **Download**: 500+ GB of block data
+- **Upload**: Varies based on peers requesting data from you
+
+By default, Bitcoin Core allows up to 125 connections (11 outbound, up to 114 inbound).
+
+### Reducing Network Traffic
+
+If bandwidth is limited:
+
+```bash
+# Limit maximum upload per day (in MiB)
+bitcoind -maxuploadtarget=5000
+
+# Disable listening for inbound connections
+bitcoind -listen=0
+
+# Reduce maximum connections
+bitcoind -maxconnections=20
+```
+
+See [Reduce Traffic documentation](/operations/performance-optimization#reducing-network-traffic) for more options.
+
+## Optimizing IBD Performance
+
+### Increase Database Cache
+
+The most effective optimization is increasing the dbcache:
+
+```bash
+# Allocate 4 GB to database cache (default: 450 MB)
+bitcoind -dbcache=4096
+```
+
+<Tip>
+Set `-dbcache` to about 50% of your available RAM for fastest IBD. For example, on a system with 8 GB RAM, use `-dbcache=4096`.
+</Tip>
+
+### Use an SSD
+
+SSD storage dramatically improves IBD speed compared to traditional hard drives:
+
+- **SSD**: 10-20x faster random I/O
+- **HDD**: Slower but adequate if you're patient
+
+### Adjust Script Verification Threads
+
+```bash
+# Use 4 threads for signature verification
+bitcoind -par=4
+```
+
+Default is the number of CPU cores minus one.
+
+## Checking If IBD is Complete
+
+IBD is complete when:
+
+```bash
+bitcoin-cli getblockchaininfo | grep initialblockdownload
+```
+
+Returns:
+
+```json
+"initialblockdownload": false
+```
+
+Your node is now fully synchronized and validating new blocks in real-time!
+
+## Troubleshooting IBD Issues
+
+### IBD Appears Stuck
+
+1. **Check network connectivity**:
+   ```bash
+   bitcoin-cli getnetworkinfo
+   bitcoin-cli getpeerinfo
+   ```
+
+2. **Verify disk space**:
+   Ensure adequate free space in your data directory
+
+3. **Check logs**:
+   Look for errors in `debug.log` in your data directory
+
+### Slow Progress
+
+- Increase `-dbcache` if you have available RAM
+- Ensure using SSD storage if possible
+- Check CPU usage - should be high during validation
+- Verify network peers are connected
+
+### Database Corruption
+
+If you suspect corruption:
+
+```bash
+# Rebuild chain state from existing blocks
+bitcoind -reindex-chainstate
+
+# Or rebuild everything from block files
+bitcoind -reindex
+```
+
+<Warning>
+Always shut down Bitcoin Core gracefully with `bitcoin-cli stop`. Forced shutdowns can corrupt the database.
+</Warning>
+
+## Assumeutxo (Fast Sync)
+
+Bitcoin Core supports assumeutxo for faster bootstrapping:
+
+- Load a UTXO snapshot to quickly get a validating node running
+- Background IBD continues to validate the full history
+- Requires downloading a trusted snapshot
+
+This feature allows you to start using your node while IBD completes in the background.
+
+<Info>
+AssumeUTXO snapshots are hardcoded in Bitcoin Core and validated against known hashes. The node still performs full validation in the background.
+</Info>
+
+## After IBD
+
+Once IBD completes:
+
+- Your node validates new blocks as they arrive (every ~10 minutes)
+- You can enable transaction indexing, wallets, and other features
+- The node contributes to the network by relaying transactions and blocks
+- You have a fully validating, trustless Bitcoin node
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Performance Optimization" icon="gauge-high" href="/operations/performance-optimization">
+    Tune your node after IBD
+  </Card>
+  <Card title="Pruning" icon="scissors" href="/operations/pruning">
+    Enable pruning to save disk space
+  </Card>
+  <Card title="Reduce Traffic" icon="download" href="/operations/performance-optimization#reducing-network-traffic">
+    Optimize bandwidth usage
+  </Card>
+  <Card title="Running Bitcoin Core" icon="play" href="/operations/running-bitcoin-core">
+    Learn basic node operation
+  </Card>
+</CardGroup>

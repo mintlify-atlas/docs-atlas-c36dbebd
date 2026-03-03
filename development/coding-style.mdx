@@ -1,0 +1,422 @@
+---
+title: Coding Style
+description: C++ coding standards and conventions for Bitcoin Core
+---
+
+## Indentation and Whitespace
+
+Bitcoin Core follows the rules specified in [src/.clang-format](https://github.com/bitcoin/bitcoin/blob/master/src/.clang-format). Use the [clang-format-diff script](https://github.com/bitcoin/bitcoin/tree/master/contrib/devtools) to automatically clean up patches.
+
+### Key Rules
+
+- **Braces on new lines** for classes, functions, methods
+- **Braces on same line** for everything else (including structs)
+- **4 space indentation** (no tabs) for every block except namespaces
+- **No indentation** for `public`/`protected`/`private` or for `namespace`
+- **No extra spaces** inside parentheses; don't do `( this )`
+- **No space after function names**; one space after `if`, `for`, and `while`
+- **Single-statement if**: Can appear on same line without braces; otherwise braces required
+- **Line width**: No hard limit, but prefer less than 100 characters if it doesn't decrease readability
+
+### Example
+
+```cpp
+int g_count{0};
+
+namespace foo {
+class Class
+{
+    std::string m_name;
+
+public:
+    bool Function(const std::string& s, int n)
+    {
+        // Comment summarising what this section of code does
+        for (int i = 0; i < n; ++i) {
+            int total_sum{0};
+            // When something fails, return early
+            if (!Something()) return false;
+            ...
+            if (SomethingElse(i)) {
+                total_sum += ComputeSomething(g_count);
+            } else {
+                DoSomething(m_name, total_sum);
+            }
+        }
+
+        // Success return is usually at the end
+        return true;
+    }
+}
+} // namespace foo
+```
+
+## Naming Conventions
+
+These are preferred in new code but not required when changes would affect significant existing code.
+
+### Variables and Namespaces
+
+- **Variable names**: All lowercase, may use `_` to separate words (snake_case)
+- **Function arguments**: Same as variables
+- **Class member variables**: `m_` prefix (e.g., `m_name`, `m_count`)
+- **Global variables**: `g_` prefix (e.g., `g_context`)
+
+### Constants and Enums
+
+- **Constant names**: All uppercase, use `_` to separate words (e.g., `MAX_BLOCK_SIZE`)
+- **Enumerator constants**: May be `snake_case`, `PascalCase`, or `ALL_CAPS` (use what seems appropriate)
+
+### Classes and Functions
+
+- **Class names**: UpperCamelCase (PascalCase), do NOT prefix with `C`
+- **Function names**: UpperCamelCase (PascalCase)
+- **Method names**: UpperCamelCase (PascalCase)
+
+### Test Suites
+
+Boost test suite in `src/test/foo_tests.cpp` should be named `foo_tests`. Test suite names must be unique.
+
+## C++ Best Practices
+
+### Preferred Syntax
+
+- **Increment**: Prefer `++i` over `i++`
+- **Null pointers**: Use `nullptr` (not `NULL` or `(void*)0`)
+- **Compile-time checks**: Use `static_assert` over `assert` where possible
+- **Casts**: Use named/functional casts, not C-style casts
+  - Between integer types: `int(x)` or `int{x}` (not `(int) x`)
+  - Between complex types: `static_cast`, `reinterpret_cast`, `const_cast`
+- **Initialization**: Prefer list initialization `int x{0};` over `int x = 0;` or `int x(0);`
+- **Recursion**: Must be explicit with `NOLINTNEXTLINE(misc-no-recursion)` comment
+
+### Namespace Usage
+
+For function calls, specify namespace explicitly to avoid [argument-dependent lookup (ADL)](https://en.cppreference.com/w/cpp/language/adl):
+
+```cpp
+#include <filesystem>
+
+namespace fs {
+class path : public std::filesystem::path {};
+bool exists(const fs::path& p) = delete;
+}
+
+int main()
+{
+    std::filesystem::path p;
+    exists(p); // ADL being used - may call unintended function
+}
+```
+
+## Functions and Methods
+
+### Parameter Ordering
+
+When ordering function parameters:
+1. Input parameters first
+2. In-out parameters next  
+3. Output parameters last
+
+*Rationale*: API consistency
+
+### Return Values
+
+- Prefer returning values directly over using in-out/output parameters
+- Use `std::optional` for optional return values
+- Use `std::optional` for optional by-value inputs (instead of magic default values)
+- Non-optional input parameters: Usually values or const references
+- Non-optional in-out/output parameters: Usually references (cannot be null)
+
+<Tip>
+Returning values directly is less error-prone, easier to read, and often has the same or better performance.
+</Tip>
+
+### Named Arguments
+
+Use a format that clang-tidy understands:
+
+```cpp
+void function(Addrman& addrman, bool clear);
+
+int main()
+{
+    function(g_addrman, /*clear=*/false);
+}
+```
+
+## Running clang-tidy
+
+Install dependencies (Ubuntu/Debian):
+
+```bash
+apt install clang-tidy clang
+```
+
+Configure with clang:
+
+```bash
+cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+```
+
+Run on all files:
+
+```bash
+( cd ./src/ && run-clang-tidy -p ../build -j $(nproc) )
+```
+
+Run on changed lines only:
+
+```bash
+git diff | ( cd ./src/ && clang-tidy-diff -p2 -path ../build -j $(nproc) )
+```
+
+## Doxygen Comments
+
+Use Doxygen-compatible comments for functions, methods, and fields.
+
+### Function Documentation
+
+```cpp
+/**
+ * ... Description ...
+ *
+ * @param[in]  arg1 input description...
+ * @param[in]  arg2 input description...
+ * @param[out] arg3 output description...
+ * @return Return cases...
+ * @throws Error type and cases...
+ * @pre  Pre-condition for function...
+ * @post Post-condition for function...
+ */
+bool function(int arg1, const char *arg2, std::string& arg3)
+```
+
+### Class Documentation
+
+```cpp
+/**
+ * Alerts are for notifying old versions if they become too obsolete and
+ * need to upgrade. The message is displayed in the status bar.
+ * @see GetWarnings()
+ */
+class CAlert
+```
+
+### Member/Variable Documentation
+
+```cpp
+//! Description before the member
+int var;
+
+int var; //!< Description after the member
+```
+
+### Recommendations
+
+- Avoid duplicating type and input/output information in descriptions
+- Use backticks to refer to `argument` names
+- Doxygen automatically builds hyperlinks for known functions
+- Avoid linking to external documentation (links can break)
+- Use `//` or `/* */` for comments you want preserved in code previews
+
+## Data Structures
+
+### std::map Usage
+
+<Note>
+Never use `std::map[]` syntax when reading from a map. Use `.find()` instead. `[]` performs an insert if the key doesn't exist, which has caused memory leaks and race conditions.
+</Note>
+
+Using `[]` is fine for *writing* to a map.
+
+### Iterator Safety
+
+Do not compare an iterator from one data structure with an iterator from another, even if they're the same type.
+
+*Rationale*: Undefined behavior that has caused hard-to-debug crashes.
+
+### Vector Safety
+
+- Watch out for out-of-bounds access
+- `&vch[vch.size()]` is illegal, including `&vch[0]` for empty vectors
+- Use `vch.data()` and `vch.data() + vch.size()` instead
+- Vector bounds checking is only enabled in debug mode
+
+### Member Initialization
+
+Initialize all non-static class members where they are defined:
+
+```cpp
+class A
+{
+    uint32_t m_count{0};
+}
+```
+
+*Rationale*: Ensures determinism, helps static analyzers, makes uninitialized members easy to spot.
+
+### Constructors
+
+By default, declare constructors `explicit`:
+
+*Rationale*: Prevents unintended [conversions](https://en.cppreference.com/w/cpp/language/converting_constructor).
+
+### Character Types
+
+Use explicitly signed or unsigned `char`s, or better yet `uint8_t` and `int8_t`. Don't use bare `char` unless passing to third-party API.
+
+*Rationale*: `char` signedness is architecture-dependent, which can lead to interoperability problems or dangerous conditions like out-of-bounds array access.
+
+### std::span
+
+Use `std::span` as a function argument when it can operate on any range-like container:
+
+```cpp
+void Foo(std::span<const int> data);
+
+std::vector<int> vec{1,2,3};
+Foo(vec);
+```
+
+*Rationale*: Avoids potentially expensive conversion to vector if caller has data in another container type.
+
+### Enumerations
+
+Prefer `enum class` (scoped) over `enum` (traditional):
+
+*Rationale*: Avoids implicit conversions to `int` and name clashes from enumerators exported to surrounding scope.
+
+```cpp
+enum class Tabs {
+    info,
+    console,
+    network_graph,
+    peers
+};
+
+int GetInt(Tabs tab)
+{
+    switch (tab) {
+    case Tabs::info: return 0;
+    case Tabs::console: return 1;
+    case Tabs::network_graph: return 2;
+    case Tabs::peers: return 3;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+}
+```
+
+## Strings and Formatting
+
+### String Handling
+
+- Use `std::string`, avoid C string manipulation functions
+- *Rationale*: Safer, less scope for buffer overflows, no surprises with `\0` characters
+
+### Format Specifiers
+
+For `strprintf`, `LogInfo`, `LogDebug`, etc., don't use size specifiers (hh, h, l, ll, j, z, t, L) for arithmetic types.
+
+*Rationale*: Bitcoin Core uses tinyformat, which is type safe.
+
+### Using .c_str()
+
+Use `.c_str()` sparingly - only to pass C++ strings to C functions expecting NULL-terminated strings.
+
+- Don't use with `.size()` - use `.data()` instead
+- Don't use with `tfm::format`, `strprintf`, `LogInfo`, `LogDebug` - they handle strings
+- Don't use to convert to `QString` - use `QString::fromStdString()`
+- When you do use it, consider checking for embedded `'\0'` characters that could truncate the string
+
+## Threading and Synchronization
+
+### Mutex Preference
+
+Prefer `Mutex` type to `RecursiveMutex`.
+
+### Thread Safety Analysis
+
+Consistently use [Clang Thread Safety Analysis](https://clang.llvm.org/docs/ThreadSafetyAnalysis.html) annotations:
+
+```cpp
+// txmempool.h
+class CTxMemPool
+{
+public:
+    mutable RecursiveMutex cs;
+    void UpdateTransactionsFromBlock(...) 
+        EXCLUSIVE_LOCKS_REQUIRED(::cs_main, cs);
+}
+
+// txmempool.cpp
+void CTxMemPool::UpdateTransactionsFromBlock(...)
+{
+    AssertLockHeld(::cs_main);
+    AssertLockHeld(cs);
+    ...
+}
+```
+
+<Tip>
+Add annotations exclusively to function declarations, not definitions. Combine annotations in declarations with run-time asserts in definitions.
+</Tip>
+
+### Lock Scope
+
+When using `LOCK`/`TRY_LOCK`, surround the statement and code needing the lock with braces:
+
+```cpp
+// OK
+{
+    TRY_LOCK(cs_vNodes, lockNodes);
+    ...
+}
+
+// Wrong
+TRY_LOCK(cs_vNodes, lockNodes);
+{
+    ...
+}
+```
+
+## Source Code Organization
+
+### Implementation Location
+
+Implementation code should go in `.cpp` files, not `.h`, unless:
+- Necessary due to template usage
+- Performance due to inlining is critical
+
+*Rationale*: Shorter, simpler headers are easier to read and reduce compile time.
+
+### Header Includes
+
+Every `.cpp` and `.h` file should `#include` every header it directly uses, even if already indirectly included.
+
+*Rationale*: Prevents compilation failures when indirect dependencies change; makes real dependencies clear.
+
+### Namespace Rules
+
+- Don't import into global namespace (`using namespace ...`)
+- Use fully specified types like `std::string`
+- Terminate namespaces with a comment:
+
+```cpp
+namespace mynamespace {
+...
+} // namespace mynamespace
+
+namespace {
+...
+} // namespace
+```
+
+## Shadowing
+
+Although `-Wshadow` is not enabled by default, name variables so they don't shadow variables defined elsewhere. When using nested loops, don't reuse the inner loop variable name.
+
+## Python Style
+
+Refer to `/test/functional/README.md#style-guidelines` for Python coding style.

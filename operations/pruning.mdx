@@ -1,0 +1,331 @@
+---
+title: Running a Pruned Node
+description: Reduce disk space requirements by enabling block pruning in Bitcoin Core
+---
+
+Pruning allows Bitcoin Core to delete old block data after validation, significantly reducing disk space requirements while maintaining a fully validating node.
+
+## What is Pruning?
+
+A pruned node:
+
+- ✅ **Downloads and validates** the entire blockchain
+- ✅ **Maintains** the full UTXO set for validation  
+- ✅ **Enforces** all consensus rules
+- ❌ **Cannot serve** historical blocks to other nodes
+- ❌ **Cannot rescan** the blockchain for old wallet transactions
+
+<Info>
+Pruned nodes are still fully validating nodes. They verify every transaction and block but don't store all historical data.
+</Info>
+
+## Storage Requirements
+
+### Full Node vs Pruned Node
+
+| Node Type | Disk Space Required |
+|-----------|--------------------|
+| Full node | ~600 GB (growing ~50-100 GB/year) |
+| Pruned node (550 MB) | ~10 GB |
+| Pruned node (5000 MB) | ~15 GB |
+| Pruned node (10000 MB) | ~20 GB |
+
+<Tip>
+The actual disk usage will be slightly larger than your prune target due to the UTXO database, chainstate, and other necessary data.
+</Tip>
+
+## Enabling Pruning
+
+### Manual Pruning
+
+Enable manual pruning without automatic deletion:
+
+```bash
+bitcoind -prune=1
+```
+
+With manual pruning:
+- Blocks are not automatically deleted
+- Use the `pruneblockchain` RPC to delete specific blocks
+- Gives you control over when and what to prune
+
+```bash
+# Prune blocks up to height 800000
+bitcoin-cli pruneblockchain 800000
+
+# Prune automatically to stay under target
+bitcoin-cli pruneblockchain
+```
+
+### Automatic Pruning
+
+Set a target disk usage in MiB:
+
+```bash
+# Keep approximately 10 GB of blocks
+bitcoind -prune=10000
+
+# Minimum: 550 MB
+bitcoind -prune=550
+```
+
+<Warning>
+The minimum prune setting is 550 MiB. Bitcoin Core needs to retain at least this much block data to function properly.
+</Warning>
+
+### In bitcoin.conf
+
+To make pruning permanent, add to your `bitcoin.conf` file:
+
+```ini
+# Automatic pruning with ~10 GB target
+prune=10000
+```
+
+<Steps>
+  <Step title="Stop Bitcoin Core">
+    ```bash
+    bitcoin-cli stop
+    ```
+  </Step>
+
+  <Step title="Edit bitcoin.conf">
+    Add the prune setting to your configuration file:
+    ```bash
+    echo "prune=10000" >> ~/.bitcoin/bitcoin.conf
+    ```
+  </Step>
+
+  <Step title="Restart Bitcoin Core">
+    ```bash
+    bitcoind -daemon
+    ```
+  </Step>
+</Steps>
+
+## Enabling Pruning on an Existing Node
+
+<Warning>
+**Important**: Enabling pruning requires re-downloading and re-validating the entire blockchain.
+
+If you already have a full node and want to enable pruning:
+1. Stop Bitcoin Core
+2. Enable pruning in configuration
+3. Bitcoin Core will automatically prune during the next startup
+
+**Disabling pruning** also requires re-downloading the entire blockchain to restore historical blocks.
+</Warning>
+
+There is one exception: if your existing node is fully synced, you can enable pruning and it will start pruning old blocks without re-downloading:
+
+```bash
+bitcoin-cli stop
+# Add prune=10000 to bitcoin.conf
+bitcoind -daemon
+```
+
+Bitcoin Core will prune old blocks to reach your target size.
+
+## How Pruning Works
+
+### During Initial Block Download
+
+<Steps>
+  <Step title="Download blocks">
+    Bitcoin Core downloads blocks from peers normally.
+  </Step>
+
+  <Step title="Validate blocks">
+    Each block is fully validated according to consensus rules.
+  </Step>
+
+  <Step title="Update UTXO set">
+    The UTXO database is updated with new unspent outputs.
+  </Step>
+
+  <Step title="Prune old blocks">
+    Once validation is complete and the prune target is exceeded, old blocks are deleted.
+    
+    Bitcoin Core retains recent blocks for serving to peers and reorg protection.
+  </Step>
+</Steps>
+
+### After IBD
+
+Once synchronized:
+
+- New blocks are validated and added normally
+- Old blocks are automatically pruned to maintain the target size
+- The most recent blocks are always retained (at least one week's worth)
+
+<Info>
+Pruned nodes keep the most recent blocks to help the network and protect against chain reorganizations.
+</Info>
+
+## Limitations of Pruned Nodes
+
+### Cannot Serve Historical Blocks
+
+Pruned nodes cannot:
+
+- Help new nodes with initial block download for old blocks
+- Serve historical blocks to other peers
+- Participate fully in the archival node network
+
+They can still:
+
+- Serve recent blocks to peers
+- Relay transactions and new blocks
+- Fully validate the blockchain
+
+### Incompatible with Transaction Index
+
+Pruning is incompatible with `-txindex`:
+
+```bash
+# This will fail
+bitcoind -prune=1000 -txindex
+```
+
+<Warning>
+You cannot enable transaction indexing (`-txindex`) on a pruned node. The transaction index requires access to all historical blocks.
+</Warning>
+
+### Limited Wallet Rescanning
+
+Pruned nodes can only rescan the blockchain from the oldest retained block:
+
+```bash
+# This may fail if blocks are pruned
+bitcoin-cli rescanblockchain 0
+```
+
+```json
+{
+  "error": "Cannot rescan beyond pruned blocks. Use -reindex"
+}
+```
+
+To rescan from genesis, you would need to re-download the blockchain.
+
+## Pruning with Assumeutxo
+
+When using assumeutxo with a pruned node:
+
+- The minimum `-prune` setting is 550 MiB normally
+- With assumeutxo, at least 1100 MiB is used temporarily
+- Two chainstates exist during background sync
+
+<Warning>
+When using assumeutxo with `-prune`, the prune budget may be exceeded temporarily. Ensure you have extra disk space available during the background sync.
+</Warning>
+
+## Pruning During IBD
+
+Bitcoin Core prunes more aggressively during initial block download:
+
+- Prunes 10% extra to avoid pruning again immediately
+- Reduces I/O operations during sync
+- Helps IBD complete faster on pruned nodes
+
+```bash
+# Start a fresh pruned node
+bitcoind -prune=10000 -dbcache=4096
+```
+
+<Tip>
+Combine pruning with a large `-dbcache` for faster IBD on systems with limited disk space but adequate RAM.
+</Tip>
+
+## Checking Prune Status
+
+Verify pruning is enabled:
+
+```bash
+bitcoin-cli getblockchaininfo
+```
+
+```json
+{
+  "pruned": true,
+  "pruneheight": 780000,
+  "automatic_pruning": true,
+  "prune_target_size": 10485760000
+}
+```
+
+- **pruned**: Whether pruning is enabled
+- **pruneheight**: Oldest block still available
+- **automatic_pruning**: If automatic pruning is active
+- **prune_target_size**: Target size in bytes
+
+## Best Practices
+
+### Choosing a Prune Target
+
+- **Minimum (550 MB)**: For extremely constrained systems
+- **1-5 GB**: Reasonable for most VPS or embedded systems  
+- **10+ GB**: Allows serving more blocks to peers
+- **No pruning**: If you have the disk space, run a full node
+
+### Considerations
+
+1. **Wallet usage**: If you frequently import old addresses or keys, consider a larger target or full node
+2. **Network contribution**: Larger prune targets help the network more
+3. **Available space**: Always leave extra space beyond your target
+4. **Future growth**: Blockchain grows ~50-100 GB per year
+
+<Tip>
+If unsure, start with `-prune=10000` (10 GB). You can always adjust later, though it requires re-syncing.
+</Tip>
+
+## Converting Between Pruned and Full
+
+### Full Node → Pruned Node
+
+```bash
+bitcoin-cli stop
+# Add prune=10000 to bitcoin.conf  
+bitcoind -daemon
+```
+
+Bitcoin Core will prune existing blocks to reach the target.
+
+### Pruned Node → Full Node
+
+<Warning>
+Reverting from pruned to full node requires re-downloading the entire blockchain.
+</Warning>
+
+```bash
+bitcoin-cli stop
+# Remove or comment out prune= from bitcoin.conf
+bitcoind -reindex
+```
+
+The `-reindex` will not restore pruned blocks. You need to re-download:
+
+```bash
+# Delete blockchain data (keep wallet!)
+rm -rf ~/.bitcoin/blocks ~/.bitcoin/chainstate
+
+# Restart without pruning
+bitcoind -daemon
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Performance Optimization" icon="gauge-high" href="/operations/performance-optimization">
+    Further optimize your pruned node
+  </Card>
+  <Card title="Reduce Traffic" icon="download" href="/operations/performance-optimization#reducing-network-traffic">
+    Minimize bandwidth usage
+  </Card>
+  <Card title="Initial Block Download" icon="download" href="/operations/initial-block-download">
+    Optimize IBD for pruned nodes
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/configuration/bitcoin-conf">
+    Learn about other configuration options
+  </Card>
+</CardGroup>

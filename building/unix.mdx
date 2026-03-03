@@ -1,0 +1,310 @@
+---
+title: Building on Linux and Unix
+description: Instructions for building Bitcoin Core on Linux and Unix systems
+---
+
+This guide explains how to build Bitcoin Core on Linux and Unix systems. For BSD-specific instructions, see the [BSD build guide](/building/bsd).
+
+## Basic Build Process
+
+<Steps>
+  <Step title="Configure the build">
+    Run CMake to configure the build system:
+    
+    ```bash
+    cmake -B build
+    ```
+    
+    To see all available configuration options:
+    
+    ```bash
+    cmake -B build -LH
+    ```
+  </Step>
+  
+  <Step title="Build and install">
+    Compile Bitcoin Core and optionally install it:
+    
+    ```bash
+    cmake --build build    # Append "-j N" for N parallel jobs
+    cmake --install build  # Optional
+    ```
+  </Step>
+</Steps>
+
+## Memory Requirements
+
+C++ compilers are memory-hungry. It is recommended to have at least 1.5 GB of memory available when compiling Bitcoin Core.
+
+<Warning>
+On systems with less memory, compilation may fail or be extremely slow. Consider using the memory optimization options below.
+</Warning>
+
+### Low Memory Optimization
+
+If you have limited memory, you can tune GCC to conserve memory:
+
+```bash
+cmake -B build -DCMAKE_CXX_FLAGS="--param ggc-min-expand=1 --param ggc-min-heapsize=32768"
+```
+
+You can also skip debugging information:
+
+```bash
+cmake -B build -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g0"
+```
+
+Alternatively, use Clang instead of GCC (often less resource-hungry):
+
+```bash
+cmake -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
+```
+
+## Distribution-Specific Instructions
+
+### Ubuntu & Debian
+
+<Steps>
+  <Step title="Install build requirements">
+    Install the base build tools:
+    
+    ```bash
+    sudo apt-get install build-essential cmake pkgconf python3
+    ```
+    
+    <Note>
+    For Debian "oldstable" or earlier Ubuntu LTS releases, you may need to install a newer compiler according to the [dependencies](/building/dependencies) documentation.
+    </Note>
+  </Step>
+  
+  <Step title="Install required dependencies">
+    Install the core dependencies:
+    
+    ```bash
+    sudo apt-get install libevent-dev libboost-dev
+    ```
+  </Step>
+  
+  <Step title="Install wallet dependencies (optional)">
+    SQLite is required for wallet functionality:
+    
+    ```bash
+    sudo apt install libsqlite3-dev
+    ```
+    
+    To build without wallet support, use `-DENABLE_WALLET=OFF` during configuration.
+  </Step>
+  
+  <Step title="Install IPC dependencies (optional)">
+    Cap'n Proto is needed for IPC functionality:
+    
+    ```bash
+    sudo apt-get install libcapnp-dev capnproto
+    ```
+    
+    To build without IPC, use `-DENABLE_IPC=OFF` during configuration.
+  </Step>
+  
+  <Step title="Install ZMQ dependencies (optional)">
+    For ZMQ notification support:
+    
+    ```bash
+    sudo apt-get install libzmq3-dev
+    ```
+    
+    Enable with `-DWITH_ZMQ=ON` during configuration.
+  </Step>
+  
+  <Step title="Install USDT dependencies (optional)">
+    For User-Space Statically Defined Tracing:
+    
+    ```bash
+    sudo apt install systemtap-sdt-dev
+    ```
+  </Step>
+  
+  <Step title="Install GUI dependencies (optional)">
+    For the Qt-based GUI:
+    
+    ```bash
+    sudo apt-get install qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-tools-dev-tools libgl-dev
+    ```
+    
+    For Wayland support:
+    
+    ```bash
+    sudo apt install qt6-wayland
+    ```
+    
+    For QR code support in the GUI:
+    
+    ```bash
+    sudo apt-get install libqrencode-dev
+    ```
+    
+    Enable the GUI with `-DBUILD_GUI=ON` during configuration.
+  </Step>
+</Steps>
+
+### Fedora
+
+<Steps>
+  <Step title="Install build requirements">
+    ```bash
+    sudo dnf install gcc-c++ cmake make python3
+    ```
+  </Step>
+  
+  <Step title="Install required dependencies">
+    ```bash
+    sudo dnf install libevent-devel boost-devel
+    ```
+  </Step>
+  
+  <Step title="Install wallet dependencies (optional)">
+    ```bash
+    sudo dnf install sqlite-devel
+    ```
+  </Step>
+  
+  <Step title="Install IPC dependencies (optional)">
+    ```bash
+    sudo dnf install capnproto capnproto-devel
+    ```
+  </Step>
+  
+  <Step title="Install ZMQ dependencies (optional)">
+    ```bash
+    sudo dnf install zeromq-devel
+    ```
+  </Step>
+  
+  <Step title="Install USDT dependencies (optional)">
+    ```bash
+    sudo dnf install systemtap-sdt-devel
+    ```
+  </Step>
+  
+  <Step title="Install GUI dependencies (optional)">
+    For Qt GUI:
+    
+    ```bash
+    sudo dnf install qt6-qtbase-devel qt6-qttools-devel
+    ```
+    
+    For Wayland support:
+    
+    ```bash
+    sudo dnf install qt6-qtwayland
+    ```
+    
+    For QR codes:
+    
+    ```bash
+    sudo dnf install qrencode-devel
+    ```
+  </Step>
+</Steps>
+
+### Alpine
+
+<Steps>
+  <Step title="Install build requirements">
+    ```bash
+    apk add build-base cmake linux-headers pkgconf python3
+    ```
+  </Step>
+  
+  <Step title="Install required dependencies">
+    ```bash
+    apk add libevent-dev boost-dev
+    ```
+  </Step>
+  
+  <Step title="Install wallet dependencies (optional)">
+    ```bash
+    apk add sqlite-dev
+    ```
+  </Step>
+  
+  <Step title="Install IPC dependencies (optional)">
+    ```bash
+    apk add capnproto capnproto-dev
+    ```
+  </Step>
+  
+  <Step title="Install ZMQ dependencies (optional)">
+    ```bash
+    apk add zeromq-dev
+    ```
+  </Step>
+  
+  <Step title="Install GUI dependencies (optional)">
+    ```bash
+    apk add qt6-qtbase-dev qt6-qttools-dev
+    ```
+    
+    For QR codes:
+    
+    ```bash
+    apk add libqrencode-dev
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+User-Space Statically Defined Tracing (USDT) is not supported or tested on Alpine Linux.
+</Warning>
+
+## Example: Arch Linux Build
+
+This example shows the complete process to build Bitcoin Core on Arch Linux:
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    pacman --sync --needed capnproto cmake boost gcc git libevent make python sqlite
+    ```
+  </Step>
+  
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    cd bitcoin/
+    ```
+  </Step>
+  
+  <Step title="Configure and build">
+    ```bash
+    cmake -B build
+    cmake --build build
+    ```
+  </Step>
+  
+  <Step title="Run tests">
+    ```bash
+    ctest --test-dir build
+    ```
+  </Step>
+  
+  <Step title="Run Bitcoin Core">
+    ```bash
+    ./build/bin/bitcoind
+    ./build/bin/bitcoin help
+    ```
+  </Step>
+</Steps>
+
+## Disable-Wallet Mode
+
+When the intention is to only run a P2P node without a wallet, Bitcoin Core can be compiled in disable-wallet mode:
+
+```bash
+cmake -B build -DENABLE_WALLET=OFF
+```
+
+In this case there is no dependency on SQLite. Mining is also possible in disable-wallet mode using the `getblocktemplate` RPC call.
+
+## Alternative: Self-Compiled Dependencies
+
+Instead of using your distribution's packages, you can self-compile all dependencies using the depends system. See [dependencies.md](/building/dependencies) for more information.

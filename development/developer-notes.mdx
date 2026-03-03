@@ -1,0 +1,272 @@
+---
+title: Developer Notes
+description: Essential guidelines and best practices for Bitcoin Core development
+---
+
+## Overview
+
+This guide covers the essential development practices, tips, and conventions used in Bitcoin Core. While various coding styles have been used historically, the project is now converging to a single consistent style.
+
+<Note>
+When writing patches, favor the new style over attempting to mimic surrounding code, except for move-only commits. Do not submit patches solely to modify the style of existing code.
+</Note>
+
+## Development Environment
+
+### Compiling for Debugging
+
+When using the default build configuration with `cmake -B build`, the `-DCMAKE_BUILD_TYPE` is set to `RelWithDebInfo`. This adds debug symbols but performs compiler optimizations that may make debugging trickier.
+
+For exclusive debugging builds:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+```
+
+<Tip>
+You can check cmake build options of an existing build with `ccmake build`.
+</Tip>
+
+### Debug Logging
+
+The `debug.log` file in the data directory contains error and debugging messages. Debug logging can be controlled:
+
+- **At startup**: Use `-debug` and `-loglevel` configuration options
+- **While running**: Use the `logging` RPC command
+
+Examples:
+- `-debug` or `-debug=1` - Turn on all log categories
+- `-loglevel=trace` - Turn on all log severity levels  
+- `-debug=qt` - See Qt-specific logging (routes `qDebug()` output)
+
+### Test Networks
+
+Bitcoin Core provides several test network options:
+
+- **Signet/Testnet**: Use `-signet` or `-testnet4` for multi-machine testing across the internet with "play bitcoins"
+- **Regtest**: Use `-regtest` for single-machine testing where blocks can be created on demand
+
+## Debugging Tools
+
+### DEBUG_LOCKORDER
+
+Bitcoin Core is multi-threaded, and deadlocks can be difficult to track. The `-DCMAKE_BUILD_TYPE=Debug` build option adds `-DDEBUG_LOCKORDER`, which:
+
+- Inserts run-time checks to track which locks are held
+- Adds warnings to `debug.log` if inconsistencies are detected
+
+### DEBUG_LOCKCONTENTION
+
+Defining `DEBUG_LOCKCONTENTION` adds a "lock" logging category that logs the location and duration of each lock contention.
+
+Enable it by:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAPPEND_CPPFLAGS="-DDEBUG_LOCKCONTENTION"
+```
+
+Then use `-debug=lock` at startup or `bitcoin-cli logging '["lock"]'` at runtime.
+
+### Assertions and Checks
+
+The `src/util/check.h` file offers helpers to protect against coding bugs. They must never validate user, network, or external input.
+
+- **`assert`/`Assert`**: For assumptions where violations mean execution cannot safely continue (e.g., validation code bugs)
+- **`CHECK_NONFATAL`**: For recoverable internal logic bugs; throws an exception on failure
+- **`Assume`**: Documents assumptions where execution can safely continue even if violated; acts like `assert` in debug builds but is optimized away in production
+
+### Valgrind
+
+Valgrind is useful for memory debugging and leak detection. The repo contains a suppressions file at `test/sanitizer_suppressions/valgrind.supp`:
+
+```bash
+valgrind --suppressions=test/sanitizer_suppressions/valgrind.supp build/bin/test_bitcoin
+valgrind --leak-check=full --show-leak-kinds=all build/bin/test_bitcoin
+valgrind -v --leak-check=full build/bin/bitcoind -printtoconsole
+./build/test/functional/test_runner.py --valgrind
+```
+
+### Sanitizers
+
+Bitcoin Core can be compiled with various sanitizers for detecting memory safety issues, thread race conditions, or undefined behavior:
+
+```bash
+# Enable address and undefined behavior sanitizers
+cmake -B build -DSANITIZERS=address,undefined
+
+# Enable thread sanitizer
+cmake -B build -DSANITIZERS=thread
+```
+
+<Note>
+Sanitizers have runtime overhead, so they're most useful when testing changes or producing debugging builds. Not all sanitizers can be enabled simultaneously (e.g., address and thread are mutually incompatible).
+</Note>
+
+Use suppressions files:
+
+```bash
+export LSAN_OPTIONS="suppressions=$(pwd)/test/sanitizer_suppressions/lsan"
+export TSAN_OPTIONS="suppressions=$(pwd)/test/sanitizer_suppressions/tsan:halt_on_error=1"
+export UBSAN_OPTIONS="suppressions=$(pwd)/test/sanitizer_suppressions/ubsan:print_stacktrace=1"
+```
+
+### Performance Profiling with perf
+
+On Linux, use [`perf`](https://www.brendangregg.com/perf.html) for performance profiling:
+
+```bash
+# Set kernel parameters (understand security implications first)
+sudo sysctl -w kernel.perf_event_paranoid=-1
+sudo sysctl -w kernel.kptr_restrict=0
+
+# Profile a running bitcoind process for 60 seconds
+perf record -g --call-graph dwarf --per-thread -F 140 -p `pgrep bitcoind` -- sleep 60
+
+# Analyze results
+perf report --stdio | c++filt | less
+```
+
+You can also use graphical tools like [Hotspot](https://github.com/KDAB/hotspot).
+
+## Code Coverage
+
+### Using LCOV
+
+Generate test coverage reports with LCOV:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Coverage
+cmake --build build
+cmake -P build/Coverage.cmake
+
+# View coverage reports
+# Unit tests: ./build/test_bitcoin.coverage/index.html
+# Unit + functional: ./build/total.coverage/index.html
+```
+
+<Tip>
+For LCOV 2.x, enable branch coverage with: `cmake -DLCOV_OPTS="--rc branch_coverage=1" -P build/Coverage.cmake`
+</Tip>
+
+### Using LLVM/Clang
+
+For source-based coverage with Clang:
+
+```bash
+# Configure build
+cmake -B build -DCMAKE_C_COMPILER="clang" \
+   -DCMAKE_CXX_COMPILER="clang++" \
+   -DAPPEND_CFLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+   -DAPPEND_CXXFLAGS="-fprofile-instr-generate -fcoverage-mapping" \
+   -DAPPEND_LDFLAGS="-fprofile-instr-generate -fcoverage-mapping"
+cmake --build build
+
+# Generate profile data
+mkdir -p build/raw_profile_data
+LLVM_PROFILE_FILE="$(pwd)/build/raw_profile_data/%m_%p.profraw" ctest --test-dir build
+
+# Merge profiles
+find build/raw_profile_data -name "*.profraw" | xargs llvm-profdata merge -o build/coverage.profdata
+
+# Generate HTML report
+llvm-cov show --object=build/bin/test_bitcoin --object=build/bin/bitcoind \
+    --instr-profile=build/coverage.profdata --format=html \
+    --output-dir=build/coverage_report
+```
+
+## Locking and Threading
+
+### Thread Overview
+
+Bitcoin Core uses multiple threads:
+
+- **Main thread (`bitcoind`)**: Startup and shutdown
+- **Init load (`b-initload`)**: Block import, reindex, chain activation
+- **CCheckQueue::Loop (`b-scriptch.x`)**: Parallel script validation
+- **ThreadHTTP (`b-http`)**: RPC and REST connections
+- **HTTP workers (`b-httpworker.x`)**: Service RPC/REST requests
+- **Indexer threads (`b-txindex`)**: One per indexer
+- **SchedulerThread (`b-scheduler`)**: Asynchronous background tasks
+- **Net threads**: Message handling, DNS seeds, socket I/O, connections
+
+### Mutex Usage
+
+The code uses mutexes with `LOCK` and `TRY_LOCK` macros:
+
+- Compile with `-DDEBUG_LOCKORDER` to detect lock order inconsistencies
+- Deadlocks occur when threads lock mutexes in different orders
+- Goal: Better-defined interfaces between components with self-contained locking
+
+## Development Guidelines
+
+### General Practices
+
+- **New features**: Expose on RPC first, then make available in GUI
+  - *Rationale*: RPC allows better automatic testing; GUI test suite is limited
+
+### Logging Levels
+
+Use these logging macros appropriately:
+
+- **`LogDebug(BCLog::CATEGORY, ...)`**: Most common; for debugging messages that can reasonably run in production with `-debug=category`
+- **`LogInfo(...)`**: Rare; for startup messages or important infrequent events (new block tip, new outbound connection). Unconditional logging.
+- **`LogError(...)`**: Severe problems requiring node/subsystem shutdown (e.g., insufficient storage)
+- **`LogWarning(...)`**: Severe problems requiring admin attention but not shutdown (e.g., wrong system time)
+- **`LogTrace(BCLog::CATEGORY, ...)`**: Messages too noisy/resource-intensive for production; requires `-debug=category -loglevel=category:trace`
+
+<Note>
+Format strings and parameters of `LogDebug` and `LogTrace` are only evaluated if the category is enabled, so avoid side-effects in those expressions.
+</Note>
+
+### IWYU (Include What You Use)
+
+The [`include-what-you-use`](https://github.com/include-what-you-use/include-what-you-use) tool helps enforce source code organization:
+
+- Run the IWYU CI job locally for consistency
+- Accept suggestions for headers that enable implicit conversions
+- Use `IWYU pragma: export` very sparingly
+
+## Generating Documentation
+
+Bitcoin Core uses [Doxygen](https://www.doxygen.nl/) for official documentation.
+
+Install dependencies:
+- **Linux**: `sudo apt install doxygen graphviz`
+- **macOS**: `brew install doxygen graphviz`
+
+Generate documentation:
+
+```bash
+cmake --build build --target docs
+```
+
+View at `build/doc/doxygen/html/index.html`
+
+## Subtrees
+
+Several parts of the repository are subtrees of external software:
+
+- **Active Bitcoin Core developers maintain**: Changes go upstream first, merged back in next subtree merge
+- **External projects**: Send changes upstream; critical bugfixes may be PRed against Bitcoin Core subtree
+
+Managed subtrees include:
+- `src/leveldb` - Upstream at https://github.com/google/leveldb
+- `src/crc32c` - Upstream at https://github.com/google/crc32c
+
+Check subtree consistency:
+
+```bash
+test/lint/git-subtree-check.sh
+```
+
+## Release Notes
+
+Write release notes for any PR that:
+- Introduces a notable new feature
+- Fixes a significant bug
+- Changes an API or configuration model
+- Makes any other visible end-user change
+
+Add to: `/doc/release-notes-<PR number>.md`
+
+All release notes files are merged into `release-notes-<version>.md` before release.

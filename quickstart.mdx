@@ -1,80 +1,223 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get Bitcoin Core up and running with basic commands
 ---
 
-## Get started in three steps
+This guide will help you download, install, and run Bitcoin Core quickly.
 
-Get your documentation site running locally and make your first customization.
+## Download Bitcoin Core
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Get the binary">
+    For an immediately usable, binary version of Bitcoin Core, visit [bitcoincore.org/en/download](https://bitcoincore.org/en/download/).
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    <Tip>
+    Pre-built binaries are available for Windows, macOS, and Linux. For most users, downloading the binary is faster than building from source.
+    </Tip>
+  </Step>
+
+  <Step title="Verify the download">
+    Always verify your Bitcoin Core downloads to ensure authenticity and security.
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    <Warning>
+    This is security-critical software. Verification helps ensure you're running authentic Bitcoin Core software.
+    </Warning>
+  </Step>
 
-### Step 2: Deploy your changes
+  <Step title="Extract and install">
+    Extract the downloaded archive to a directory of your choice.
+  </Step>
+</Steps>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Run Bitcoin Core
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Tabs>
+  <Tab title="Unix/Linux">
+    Unpack the files into a directory and run:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    <CodeGroup>
+    ```bash GUI (bitcoin-qt)
+    bin/bitcoin-qt
+    ```
 
-### Step 3: Go live
+    ```bash Headless daemon (bitcoind)
+    bin/bitcoind
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash Wrapper command
+    bin/bitcoin help
+    ```
+    </CodeGroup>
+
+    The `bitcoin` command supports subcommands:
+    - `bitcoin gui` - Start the graphical interface
+    - `bitcoin node` - Start the node daemon
+    - `bitcoin rpc` - Execute RPC commands
+
+    List available subcommands with:
+    ```bash
+    bitcoin help
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    Unpack the files into a directory, and then run:
+    ```
+    bitcoin-qt.exe
+    ```
+
+    For headless operation, run:
+    ```
+    bitcoind.exe
+    ```
+  </Tab>
+
+  <Tab title="macOS">
+    1. Drag Bitcoin Core to your applications folder
+    2. Launch Bitcoin Core from your Applications
+
+    For command-line access:
+    ```bash
+    /Applications/Bitcoin-Qt.app/Contents/MacOS/Bitcoin-Qt
+    ```
+  </Tab>
+</Tabs>
+
+## First-time sync
+
+<Warning>
+The initial blockchain synchronization requires **several hundred gigabytes** of disk space and can take hours to days depending on your hardware and connection speed.
+</Warning>
+
+When you first run Bitcoin Core:
+
+1. The node will connect to the Bitcoin peer-to-peer network
+2. It will download and validate all blocks from the genesis block
+3. You can monitor progress in the GUI or via RPC commands
+
+## Basic RPC commands
+
+Once Bitcoin Core is running, you can interact with it using RPC commands.
+
+### Using bitcoin-cli
+
+<CodeGroup>
+```bash Get blockchain info
+bitcoin-cli getblockchaininfo
+```
+
+```bash Get network info
+bitcoin-cli getnetworkinfo
+```
+
+```bash Get block count
+bitcoin-cli getblockcount
+```
+
+```bash Create a wallet
+bitcoin-cli createwallet mywallet
+```
+
+```bash Get wallet balance
+bitcoin-cli -rpcwallet=mywallet getbalance
+```
+</CodeGroup>
+
+### Using the bitcoin wrapper command
+
+The `bitcoin rpc` command is a newer alternative to `bitcoin-cli -named`:
+
+```bash
+bitcoin rpc getblockcount
+bitcoin rpc createwallet wallet_name=mywallet load_on_startup=true
+```
+
+### Using curl with JSON-RPC
+
+<CodeGroup>
+```bash Get block count
+curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getblockcount", "params": []}' \
+  -H 'content-type: application/json' \
+  http://localhost:8332/
+```
+
+```bash Get wallet balance
+curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getbalance", "params": []}' \
+  -H 'content-type: application/json' \
+  http://localhost:8332/wallet/mywallet
+```
+</CodeGroup>
+
+<Note>
+The default RPC port is 8332 for mainnet, 18332 for testnet, and 18443 for regtest.
+</Note>
+
+## Configuration
+
+### Basic configuration file
+
+Create a `bitcoin.conf` file to customize Bitcoin Core behavior:
+
+**Default locations:**
+- **Linux**: `~/.bitcoin/bitcoin.conf`
+- **macOS**: `~/Library/Application Support/Bitcoin/bitcoin.conf`
+- **Windows**: `%LOCALAPPDATA%\Bitcoin\bitcoin.conf`
+
+**Example configuration:**
+```ini
+# Enable RPC server (disabled by default in bitcoin-qt)
+server=1
+
+# RPC credentials (or use .cookie authentication)
+rpcuser=yourusername
+rpcpassword=yourpassword
+
+# Prune old blocks to save disk space (in MiB, 0=disable)
+prune=50000
+
+# Limit bandwidth usage
+maxuploadtarget=5000
+```
+
+<Tip>
+By default, Bitcoin Core uses `.cookie` file authentication which automatically generates credentials on startup. You only need to set `rpcuser` and `rpcpassword` if you need static credentials.
+</Tip>
+
+## Enabling RPC in the GUI
+
+The GUI `bitcoin-qt` has the JSON-RPC server **disabled by default**. To enable it:
+
+1. Add `server=1` to your `bitcoin.conf` file, or
+2. Start bitcoin-qt with the `-server` flag: `bitcoin-qt -server`
+
+With RPC enabled, you can execute RPC methods in the **Debug Console** (accessible from the GUI menu).
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card
+    title="Installation guide"
+    icon="download"
+    href="/installation"
+  >
+    Detailed installation instructions for all platforms
+  </Card>
+  <Card
+    title="Configuration reference"
+    icon="gear"
+  >
+    Learn about bitcoin.conf options and advanced configuration
+  </Card>
+  <Card
+    title="RPC reference"
+    icon="code"
+  >
+    Explore the complete JSON-RPC API documentation
+  </Card>
+  <Card
+    title="Security best practices"
+    icon="shield"
+  >
+    Learn how to secure your Bitcoin Core installation
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

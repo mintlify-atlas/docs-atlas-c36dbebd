@@ -1,0 +1,165 @@
+---
+title: Managing Wallets
+description: Creating, loading, and managing Bitcoin Core wallets
+---
+
+Since Bitcoin Core version 0.21, there is no default wallet created automatically. You must explicitly create or load wallets using RPC commands or the GUI.
+
+## Creating a Wallet
+
+Wallets can be created using the `createwallet` RPC command or through the GUI.
+
+### Using RPC
+
+To create a basic descriptor wallet:
+
+```bash
+bitcoin-cli createwallet "wallet-01"
+```
+
+To create an encrypted wallet with a passphrase:
+
+```bash
+bitcoin-cli -named createwallet wallet_name="wallet-01" passphrase="passphrase"
+```
+
+<Warning>
+If you lose your passphrase, all coins in the wallet will be permanently lost. There is no recovery mechanism.
+</Warning>
+
+### Using the GUI
+
+<Steps>
+  <Step title="Open Create Wallet Dialog">
+    Click the `Create a new wallet` button on the main screen, or navigate to `File` > `Create wallet`.
+  </Step>
+  
+  <Step title="Configure Wallet Options">
+    Enter a wallet name and select desired options such as encryption, descriptor wallet type, and watch-only mode.
+  </Step>
+  
+  <Step title="Set Passphrase (Optional)">
+    If you choose to encrypt the wallet, enter and confirm a strong passphrase.
+  </Step>
+</Steps>
+
+## Wallet Storage Location
+
+By default, wallets are stored in the `wallets` folder within your data directory:
+
+| Operating System | Default Wallet Directory |
+|-----------------|-------------------------|
+| Linux | `/home/<user>/.bitcoin/wallets` |
+| Windows | `C:\Users\<user>\AppData\Local\Bitcoin\wallets` |
+| macOS | `/Users/<user>/Library/Application Support/Bitcoin/wallets` |
+
+You can customize this location using the `-datadir` or `-walletdir` initialization parameters.
+
+## Loading and Unloading Wallets
+
+### Loading a Wallet
+
+Load an existing wallet:
+
+```bash
+bitcoin-cli loadwallet "wallet-01"
+```
+
+In the GUI, navigate to `File` > `Open Wallet` and select the wallet you want to load.
+
+### Unloading a Wallet
+
+Unload a currently loaded wallet:
+
+```bash
+bitcoin-cli unloadwallet "wallet-01"
+```
+
+### Listing Loaded Wallets
+
+View all currently loaded wallets:
+
+```bash
+bitcoin-cli listwallets
+```
+
+## Encrypting Wallets
+
+Wallet encryption protects your private keys with a passphrase. However, it significantly increases the risk of losing funds if you forget the passphrase.
+
+### Encrypting an Existing Wallet
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" encryptwallet "passphrase"
+```
+
+<Warning>
+After encrypting or changing your passphrase, immediately create a new backup. The keypool is flushed and a new HD seed is generated after encryption. Bitcoins received by the new seed cannot be recovered from previous backups.
+</Warning>
+
+### Changing the Passphrase
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" walletpassphrasechange "oldpassphrase" "newpassphrase"
+```
+
+## Unlocking Encrypted Wallets
+
+When performing operations that require private keys (like sending transactions), encrypted wallets must be unlocked:
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" walletpassphrase "passphrase" 120
+```
+
+The second argument (`120`) specifies the timeout in seconds that the wallet remains unlocked.
+
+### Error When Locked
+
+Attempting to send funds from a locked wallet produces an error:
+
+```
+bitcoin-cli -rpcwallet="wallet-01" sendtoaddress "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx" 0.01
+
+Error code: -13
+Error message: Please enter the wallet passphrase with walletpassphrase first.
+```
+
+## Wallet Information
+
+Get detailed information about a wallet:
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" getwalletinfo
+```
+
+This returns information including:
+- Wallet name and version
+- Balance and transaction count
+- Whether the wallet is encrypted
+- HD seed status
+- Keypool size
+- Descriptor wallet status
+
+## Understanding Wallet Passphrases
+
+The wallet passphrase is an encryption key for your private keys, not to be confused with the HD seed:
+
+- **Not the Seed**: The passphrase encrypts private keys but is separate from the HD seed that derives keys
+- **Protection Against Unauthorized Access**: Prevents access if someone gains physical access to your device
+- **Doesn't Encrypt Metadata**: Transaction history and public keys remain visible
+- **Risk of Fund Loss**: A forgotten passphrase results in permanent loss of access to funds
+
+<Warning>
+The passphrase does not protect against sophisticated attacks like keyloggers. An attacker with access to your device can potentially capture your passphrase when you enter it.
+</Warning>
+
+## Multiple Wallets
+
+Bitcoin Core supports loading multiple wallets simultaneously. When using RPC commands with multiple wallets loaded, specify which wallet to use with the `-rpcwallet` parameter:
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" getbalance
+bitcoin-cli -rpcwallet="wallet-02" getbalance
+```
+
+In the GUI, use the wallet dropdown in the upper right corner to switch between loaded wallets.

@@ -1,0 +1,290 @@
+---
+title: "P2P Network Protocol"
+description: "Learn about Bitcoin Core's peer-to-peer network protocol, peer discovery mechanisms, and connection management"
+---
+
+## Overview
+
+Bitcoin Core operates on a peer-to-peer (P2P) network where nodes communicate directly with each other to relay transactions and blocks. The network is designed to be decentralized, resilient, and resistant to censorship.
+
+## Network Types
+
+Bitcoin Core supports multiple network types, each identified by a specific address format:
+
+- **IPv4** - Traditional internet addresses (e.g., `192.168.1.1`)
+- **IPv6** - Modern internet addresses (e.g., `2001:db8::1`)
+- **Tor (Onion)** - Privacy network addresses ending in `.onion`
+- **I2P** - Privacy network addresses ending in `.b32.i2p`
+- **CJDNS** - Encrypted IPv6 network using `fc00::/8` range
+
+## Peer Discovery
+
+Bitcoin Core uses several mechanisms to discover and connect to peers:
+
+### DNS Seeds
+
+When a node first starts or has few connections, it queries DNS seeds to obtain initial peer addresses.
+
+<Note>
+DNS seed queries are delayed based on the number of known peers:
+- **Few peers** (< 1000): 11 second delay
+- **Many peers** (≥ 1000): 5 minute delay
+</Note>
+
+Configuration options:
+
+```bash
+# Query 3 DNS seeds at once when connections are low
+DNSSEEDS_TO_QUERY_AT_ONCE=3
+
+# Minimum outbound connections before stopping seed queries
+SEED_OUTBOUND_CONNECTION_THRESHOLD=2
+```
+
+### Address Manager (AddrMan)
+
+The address manager maintains a database of known peer addresses, stored in `peers.dat`. It implements a tried-and-new bucketing system:
+
+- **Tried table** - Addresses of peers successfully connected to
+- **New table** - Recently learned addresses not yet connected
+
+<Tip>
+The address database is automatically dumped to disk every 15 minutes to preserve peer information across restarts.
+</Tip>
+
+### Anchor Connections
+
+Bitcoin Core maintains up to 2 block-relay-only anchor connections that persist across restarts. These connections are stored in `anchors.dat` and help prevent eclipse attacks.
+
+```cpp
+// Maximum number of block-relay-only anchor connections
+MAX_BLOCK_RELAY_ONLY_ANCHORS = 2
+```
+
+## Connection Types
+
+Bitcoin Core establishes different types of connections for various purposes:
+
+### Outbound Connections
+
+1. **Full Relay** - Full transaction and block relay
+2. **Block Relay Only** - Only blocks are relayed, no transactions
+3. **Feeler** - Short-lived connections to test peer responsiveness
+4. **Address Fetch** - Connections specifically to fetch peer addresses
+
+### Inbound Connections
+
+Incoming connections from other nodes. By default, listening is enabled unless running behind a proxy.
+
+```bash
+# Enable listening for incoming connections
+bitcoind -listen=1
+
+# Disable listening
+bitcoind -listen=0
+```
+
+## Configuration Options
+
+### Basic Network Configuration
+
+```bash
+# Set custom port (default: 8333 for mainnet)
+bitcoind -port=8333
+
+# Bind to specific address
+bitcoind -bind=192.168.1.100
+
+# Connect to specific peer
+bitcoind -connect=192.168.1.50:8333
+
+# Add a node to connect to
+bitcoind -addnode=node.example.com:8333
+
+# Use specific seed node
+bitcoind -seednode=seed.example.com
+```
+
+### Network Selection
+
+```bash
+# Only connect to specific network(s)
+bitcoind -onlynet=ipv4
+bitcoind -onlynet=ipv6
+bitcoind -onlynet=onion
+bitcoind -onlynet=i2p
+bitcoind -onlynet=cjdns
+
+# Combine multiple networks
+bitcoind -onlynet=onion -onlynet=i2p
+```
+
+### External IP Advertisement
+
+```bash
+# Advertise your external IP address
+bitcoind -externalip=203.0.113.5
+
+# Multiple external addresses
+bitcoind -externalip=203.0.113.5 -externalip=7zvj7a2i...shid.onion
+```
+
+### Network Discovery
+
+```bash
+# Enable address discovery (default: on)
+bitcoind -discover=1
+
+# Disable discovery when using -externalip
+bitcoind -discover=0 -externalip=your.onion.address
+```
+
+## Privacy Network Integration
+
+<Steps>
+
+<Step title="Understand Network Separation">
+Bitcoin Core separates privacy networks from clearnet to prevent address correlation. Privacy network addresses (Tor, I2P) are not advertised to clearnet peers and vice versa.
+</Step>
+
+<Step title="Configure Multi-Network Operation">
+You can run Bitcoin Core on multiple networks simultaneously:
+
+```bash
+bitcoind -proxy=127.0.0.1:9050 -i2psam=127.0.0.1:7656 -cjdnsreachable
+```
+</Step>
+
+<Step title="Monitor Network Status">
+Use `bitcoin-cli -netinfo` to view connection information:
+
+```bash
+bitcoin-cli -netinfo
+```
+</Step>
+
+</Steps>
+
+<Warning>
+Operating a node on multiple networks (e.g., IPv4 and Tor) can help strengthen the network but may allow adversaries to correlate identities through shared runtime characteristics. This is not recommended if you require unlinkability across networks.
+</Warning>
+
+## Network Reachability
+
+The network layer uses a reachability scoring system to determine the best local address to advertise to each peer:
+
+```cpp
+// src/net.cpp - GetLocal() function
+// Scores addresses based on:
+// - Network compatibility (privacy net vs clearnet)
+// - Reachability from peer's perspective
+// - Local score (based on usage)
+```
+
+## Monitoring and Debugging
+
+### Get Network Information
+
+```bash
+# View network info
+bitcoin-cli getnetworkinfo
+
+# View peer information
+bitcoin-cli getpeerinfo
+
+# Get node addresses by network
+bitcoin-cli getnodeaddresses 10 "ipv4"
+bitcoin-cli getnodeaddresses 10 "onion"
+
+# View address info summary
+bitcoin-cli -addrinfo
+```
+
+### Network Statistics
+
+```bash
+# Detailed network info with peer counts
+bitcoin-cli -netinfo 4
+```
+
+### Debug Logging
+
+Enable network-specific debug logging:
+
+```bash
+# General network debugging
+bitcoind -debug=net
+
+# Specific network debugging
+bitcoind -debug=tor
+bitcoind -debug=i2p
+```
+
+## Performance Tuning
+
+### Upload Limits
+
+```bash
+# Limit upload bandwidth (in MiB per day)
+bitcoind -maxuploadtarget=144  # ~6 MB/hour
+```
+
+The default timeframe is 24 hours (86400 seconds).
+
+### Connection Limits
+
+```bash
+# Maximum number of inbound+outbound connections
+bitcoind -maxconnections=125
+```
+
+## Security Considerations
+
+<Note>
+**Best Practices:**
+- Use multiple network types for redundancy
+- Enable block-relay-only connections for privacy
+- Monitor peer connections regularly
+- Keep `peers.dat` backed up for faster restarts
+- Consider using `-onlynet=onion` for maximum privacy
+</Note>
+
+## Advanced Features
+
+### Feeler Connections
+
+Bitcoin Core periodically creates short-lived "feeler" connections to test if addresses in the new table are responsive. A random 0-1 second delay is added to prevent synchronization.
+
+```cpp
+FEELER_SLEEP_WINDOW = 1s
+```
+
+### Extra Network Peers
+
+Every 5 minutes, Bitcoin Core attempts to connect to reachable networks it's not currently connected to:
+
+```cpp
+EXTRA_NETWORK_PEER_INTERVAL = 5min
+```
+
+### Bridge Nodes
+
+Nodes listening on multiple networks act as bridge nodes, increasing the cost and complexity of eclipse and partition attacks against the Bitcoin network.
+
+## RPC Commands
+
+| Command | Description |
+|---------|-------------|
+| `getnetworkinfo` | Returns network-related information |
+| `getpeerinfo` | Returns data about each connected peer |
+| `getnodeaddresses` | Return known addresses from addr manager |
+| `addnode` | Add/remove/query a node |
+| `disconnectnode` | Disconnect from a specified node |
+| `setnetworkactive` | Enable/disable all P2P network activity |
+
+## See Also
+
+- [Tor Support](/networking/tor) - Configure Bitcoin Core with Tor
+- [I2P Support](/networking/i2p) - Configure Bitcoin Core with I2P
+- [CJDNS Support](/networking/cjdns) - Configure Bitcoin Core with CJDNS
+- [ZMQ Notifications](/networking/zmq) - Real-time event notifications

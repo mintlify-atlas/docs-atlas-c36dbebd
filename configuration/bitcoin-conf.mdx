@@ -1,0 +1,530 @@
+---
+title: "bitcoin.conf Configuration File"
+description: "Complete guide to Bitcoin Core configuration file format, syntax, and common options"
+---
+
+The `bitcoin.conf` configuration file is used by `bitcoind`, `bitcoin-qt`, and `bitcoin-cli` to control Bitcoin Core's behavior.
+
+## Configuration File Location
+
+By default, `bitcoin.conf` is located in the Bitcoin data directory:
+
+| Operating System | Default Path |
+|-----------------|-------------|
+| Linux | `~/.bitcoin/bitcoin.conf` |
+| macOS | `~/Library/Application Support/Bitcoin/bitcoin.conf` |
+| Windows | `%LOCALAPPDATA%\Bitcoin\bitcoin.conf` |
+
+You can specify a custom location using the `-conf` command-line option:
+
+```bash
+bitcoind -conf=/path/to/custom/bitcoin.conf
+```
+
+## File Format
+
+The configuration file is a plain text file with `option=value` entries, one per line.
+
+### Basic Syntax
+
+```ini
+# This is a comment
+option=value
+anotheroption=anothervalue
+```
+
+<Note>
+  Leading and trailing whitespaces are removed. An option must be specified without the leading `-` used in command-line arguments.
+</Note>
+
+### Comments
+
+Comments start with `#` and extend to the end of the line:
+
+```ini
+# Full line comment (preferred)
+txindex=1  # Inline comment after option
+```
+
+### Network-Specific Options
+
+Options can be specified for specific networks using section headers or prefixes:
+
+```ini
+# Using section headers
+[main]
+rpcport=8332
+
+[test]
+rpcport=18332
+
+[regtest]
+rpcport=18443
+
+# Using prefixes
+regtest.maxmempool=100
+```
+
+<Warning>
+  The testnet section header is `[test]`, not `[testnet]`. For testnet4, use `[testnet4]`.
+</Warning>
+
+Network-specific options take precedence over non-network specific options. If multiple values for the same option are found with the same precedence, the first one is chosen.
+
+### Negated Options
+
+Most options can be negated using the `no` prefix:
+
+```ini
+# Disable transaction index
+notxindex=1
+
+# Disable DNS lookups
+nodns=1
+```
+
+## Common Configuration Options
+
+### Core Options
+
+<ParamField path="datadir" type="string">
+  Specify the data directory path. Default varies by platform.
+  
+  ```ini
+  datadir=/mnt/bitcoin
+  ```
+</ParamField>
+
+<ParamField path="conf" type="string">
+  Specify path to an additional configuration file. Relative paths are prefixed by datadir location.
+  
+  ```ini
+  # Not available in bitcoin.conf, command-line only
+  ```
+</ParamField>
+
+<ParamField path="includeconf" type="string">
+  Include additional configuration file. Can be used multiple times. Relative to datadir.
+  
+  ```ini
+  includeconf=rpc.conf
+  includeconf=network.conf
+  ```
+</ParamField>
+
+<ParamField path="pid" type="string">
+  Specify PID file location. Default: `bitcoind.pid`
+  
+  ```ini
+  pid=/var/run/bitcoind.pid
+  ```
+</ParamField>
+
+### Chain and Database Options
+
+<ParamField path="chain" type="string" default="main">
+  Use a specific chain: `main`, `test`, `testnet4`, `signet`, or `regtest`
+  
+  ```ini
+  chain=regtest
+  ```
+</ParamField>
+
+<ParamField path="testnet" type="boolean" default="0">
+  Use the test network (testnet3)
+  
+  ```ini
+  testnet=1
+  ```
+</ParamField>
+
+<ParamField path="regtest" type="boolean" default="0">
+  Enter regression test mode
+  
+  ```ini
+  regtest=1
+  ```
+</ParamField>
+
+<ParamField path="dbcache" type="number" default="450">
+  Maximum database cache size in MiB. Minimum 4, default 450.
+  
+  ```ini
+  dbcache=4096
+  ```
+</ParamField>
+
+<ParamField path="prune" type="number" default="0">
+  Reduce storage by pruning old blocks. Specify target size in MiB. 0=disable, 1=enable with 550 MiB minimum.
+  
+  ```ini
+  prune=10000
+  ```
+</ParamField>
+
+<ParamField path="txindex" type="boolean" default="0">
+  Maintain a full transaction index for the getrawtransaction RPC
+  
+  ```ini
+  txindex=1
+  ```
+</ParamField>
+
+<ParamField path="blocksdir" type="string">
+  Specify directory to hold blocks subdirectory. Default: `<datadir>`
+  
+  ```ini
+  blocksdir=/mnt/storage/blocks
+  ```
+</ParamField>
+
+### RPC Server Options
+
+<ParamField path="server" type="boolean" default="0">
+  Accept command line and JSON-RPC commands
+  
+  ```ini
+  server=1
+  ```
+</ParamField>
+
+<ParamField path="rpcuser" type="string">
+  Username for JSON-RPC connections
+  
+  ```ini
+  rpcuser=bitcoinrpc
+  ```
+</ParamField>
+
+<ParamField path="rpcpassword" type="string">
+  Password for JSON-RPC connections
+  
+  ```ini
+  rpcpassword=your-secure-password-here
+  ```
+</ParamField>
+
+<ParamField path="rpcauth" type="string">
+  Username and HMAC-SHA-256 hashed password. Format: `<USERNAME>:<SALT>$<HASH>`
+  
+  ```ini
+  rpcauth=alice:e3c4f2a7$0f2d98a1b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0
+  ```
+</ParamField>
+
+<ParamField path="rpcport" type="number">
+  Listen for JSON-RPC connections on this port. Default: 8332 (mainnet), 18332 (testnet3), 18443 (regtest)
+  
+  ```ini
+  rpcport=8332
+  ```
+</ParamField>
+
+<ParamField path="rpcbind" type="string" default="127.0.0.1">
+  Bind to given address to listen for JSON-RPC connections. Use `[host]:port` notation for IPv6.
+  
+  ```ini
+  rpcbind=127.0.0.1:8332
+  rpcbind=[::1]:8332
+  ```
+</ParamField>
+
+<ParamField path="rpcallowip" type="string" default="127.0.0.1">
+  Allow JSON-RPC connections from specified source. Can specify IP, network/netmask, or network/CIDR.
+  
+  ```ini
+  rpcallowip=127.0.0.1
+  rpcallowip=192.168.1.0/24
+  ```
+</ParamField>
+
+<Warning>
+  Do not expose the RPC server to untrusted networks such as the public internet!
+</Warning>
+
+<ParamField path="rest" type="boolean" default="0">
+  Accept public REST requests
+  
+  ```ini
+  rest=1
+  ```
+</ParamField>
+
+### Network Options
+
+<ParamField path="listen" type="boolean" default="1">
+  Accept connections from outside
+  
+  ```ini
+  listen=1
+  ```
+</ParamField>
+
+<ParamField path="port" type="number">
+  Listen for connections on this port. Default: 8333 (mainnet), 18333 (testnet3), 18444 (regtest)
+  
+  ```ini
+  port=8333
+  ```
+</ParamField>
+
+<ParamField path="bind" type="string">
+  Bind to given address and always listen on it. Use `[host]:port` notation for IPv6.
+  
+  ```ini
+  bind=0.0.0.0:8333
+  bind=[::]:8333
+  ```
+</ParamField>
+
+<ParamField path="maxconnections" type="number" default="125">
+  Maintain at most this many connections to peers
+  
+  ```ini
+  maxconnections=200
+  ```
+</ParamField>
+
+<ParamField path="addnode" type="string">
+  Add a node to connect to and attempt to keep the connection open. Can be specified multiple times.
+  
+  ```ini
+  addnode=69.164.218.197
+  addnode=10.0.0.2:8333
+  ```
+</ParamField>
+
+<ParamField path="connect" type="string">
+  Connect only to the specified node(s). Can be specified multiple times.
+  
+  ```ini
+  connect=192.168.1.100
+  ```
+</ParamField>
+
+<ParamField path="proxy" type="string">
+  Connect through SOCKS5 proxy
+  
+  ```ini
+  proxy=127.0.0.1:9050
+  ```
+</ParamField>
+
+<ParamField path="onion" type="string">
+  Use separate SOCKS5 proxy to reach peers via Tor onion services
+  
+  ```ini
+  onion=127.0.0.1:9050
+  ```
+</ParamField>
+
+### Mempool Options
+
+<ParamField path="maxmempool" type="number" default="300">
+  Keep the transaction memory pool below this many megabytes
+  
+  ```ini
+  maxmempool=500
+  ```
+</ParamField>
+
+<ParamField path="mempoolexpiry" type="number" default="336">
+  Do not keep transactions in the mempool longer than this many hours
+  
+  ```ini
+  mempoolexpiry=72
+  ```
+</ParamField>
+
+<ParamField path="persistmempool" type="boolean" default="1">
+  Save the mempool on shutdown and load on restart
+  
+  ```ini
+  persistmempool=1
+  ```
+</ParamField>
+
+## Advanced Options
+
+<Accordion title="Mining and Block Creation">
+  <ParamField path="blockmaxweight" type="number" default="3996000">
+    Set maximum BIP141 block weight
+    
+    ```ini
+    blockmaxweight=4000000
+    ```
+  </ParamField>
+  
+  <ParamField path="blockmintxfee" type="number" default="0.00001000">
+    Set lowest fee rate (in BTC/kvB) for transactions to be included in block creation
+    
+    ```ini
+    blockmintxfee=0.00001
+    ```
+  </ParamField>
+</Accordion>
+
+<Accordion title="Transaction Relay">
+  <ParamField path="minrelaytxfee" type="number" default="0.00001000">
+    Fees (in BTC/kvB) smaller than this are considered zero fee for relaying and mining
+    
+    ```ini
+    minrelaytxfee=0.00001
+    ```
+  </ParamField>
+  
+  <ParamField path="blocksonly" type="boolean" default="0">
+    Reject transactions from network peers. Automatic broadcast is disabled.
+    
+    ```ini
+    blocksonly=1
+    ```
+  </ParamField>
+  
+  <ParamField path="datacarrier" type="boolean" default="1">
+    Relay and mine data carrier transactions
+    
+    ```ini
+    datacarrier=1
+    ```
+  </ParamField>
+</Accordion>
+
+<Accordion title="ZeroMQ Notifications">
+  <ParamField path="zmqpubhashblock" type="string">
+    Enable publish hash block in specified address
+    
+    ```ini
+    zmqpubhashblock=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="zmqpubhashtx" type="string">
+    Enable publish hash transaction in specified address
+    
+    ```ini
+    zmqpubhashtx=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="zmqpubrawblock" type="string">
+    Enable publish raw block in specified address
+    
+    ```ini
+    zmqpubrawblock=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+  
+  <ParamField path="zmqpubrawtx" type="string">
+    Enable publish raw transaction in specified address
+    
+    ```ini
+    zmqpubrawtx=tcp://127.0.0.1:28332
+    ```
+  </ParamField>
+</Accordion>
+
+<Accordion title="Notification Commands">
+  <ParamField path="blocknotify" type="string">
+    Execute command when the best block changes. %s in cmd is replaced by block hash.
+    
+    ```ini
+    blocknotify=/usr/local/bin/notify-block.sh %s
+    ```
+  </ParamField>
+  
+  <ParamField path="alertnotify" type="string">
+    Execute command when an alert is raised. %s in cmd is replaced by message.
+    
+    ```ini
+    alertnotify=echo %s | mail -s "Bitcoin Alert" admin@example.com
+    ```
+  </ParamField>
+</Accordion>
+
+## Configuration Precedence
+
+Settings are applied in the following order (later overrides earlier):
+
+1. `bitcoin.conf` file
+2. `settings.json` file (dynamic settings from GUI/RPC)
+3. Command-line options
+
+<Info>
+  The `settings.json` file contains dynamic settings set by Bitcoin Core GUI and RPCs at runtime, and augments or replaces static settings in `bitcoin.conf`.
+</Info>
+
+## Example Configurations
+
+### Minimal RPC Configuration
+
+```ini
+# Enable RPC server
+server=1
+
+# RPC authentication
+rpcuser=bitcoinrpc
+rpcpassword=change_this_password
+
+# Listen only on localhost
+rpcbind=127.0.0.1:8332
+rpcallowip=127.0.0.1
+```
+
+### Pruned Node Configuration
+
+```ini
+# Reduce storage requirements
+prune=10000
+
+# Disable transaction index (incompatible with pruning)
+txindex=0
+
+# Limit mempool size
+maxmempool=100
+```
+
+### Full Archival Node
+
+```ini
+# Maximum cache for better performance
+dbcache=4096
+
+# Full transaction index
+txindex=1
+
+# Large mempool
+maxmempool=500
+
+# Listen for connections
+listen=1
+```
+
+### Testnet Configuration
+
+```ini
+# Use testnet
+testnet=1
+
+# Enable RPC
+server=1
+rpcuser=testuser
+rpcpassword=testpass
+```
+
+## Validation and Debugging
+
+To check which settings are in use:
+
+1. Check `debug.log` output for configuration values
+2. Unrecognized options appear as warnings in `debug.log`
+3. Use `bitcoin-cli getinfo` to verify runtime settings
+
+<Warning>
+  Users should never make configuration changes they do not understand. Always be cautious of accepting configuration changes from untrusted sources.
+</Warning>
+
+## See Also
+
+- [Command-Line Options](/configuration/command-line-options) - All available command-line arguments
+- [Data Directory Structure](/configuration/data-directory) - File and directory layout

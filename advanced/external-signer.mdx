@@ -1,0 +1,352 @@
+---
+title: External Signer Support
+description: Use hardware wallets and external signing devices with Bitcoin Core via HWI
+---
+
+Bitcoin Core can integrate with external signing devices like hardware wallets, allowing you to store private keys on dedicated secure hardware while using Bitcoin Core for transaction management and blockchain interaction.
+
+## What is External Signer Support?
+
+External signer support allows Bitcoin Core to:
+
+- Communicate with hardware wallets (Ledger, Trezor, Coldcard, etc.)
+- Create watch-only wallets with keys managed by external devices
+- Sign transactions using hardware wallet confirmation
+- Verify addresses on the device screen for security
+
+Bitcoin Core doesn't directly connect to hardware wallets. Instead, it uses external tools that implement the signer API, such as [HWI (Hardware Wallet Interface)](https://github.com/bitcoin-core/HWI).
+
+## When to Use External Signers
+
+External signers are ideal for:
+
+- **Maximum Security**: Private keys never leave the hardware device
+- **Cold Storage**: Keep large amounts secure on hardware wallets
+- **Multi-sig Setups**: Combine hardware wallets with Bitcoin Core's descriptor wallets
+- **Regulatory Compliance**: Maintain full node validation while using secure key storage
+- **Personal Sovereignty**: Run your own full node without sacrificing key security
+
+<Warning>
+Hardware wallets and tools like HWI are considered experimental. They have less review than Bitcoin Core itself. Consult manufacturer websites for recommended software and follow their security practices.
+</Warning>
+
+## Setting Up External Signer
+
+### Prerequisites
+
+1. A compatible hardware wallet (Ledger, Trezor, Coldcard, etc.)
+2. [HWI](https://github.com/bitcoin-core/HWI) version 2.0 or newer installed
+3. Hardware wallet initialized and backed up per manufacturer instructions
+
+### Starting Bitcoin Core with Signer
+
+Launch Bitcoin Core (or `bitcoin-node`) with the `-signer` option:
+
+```bash
+bitcoind -signer=/path/to/hwi.py
+```
+
+Or with multiprocess:
+
+```bash
+bitcoin -m node -signer=/path/to/hwi.py
+```
+
+The `<cmd>` argument is the path to an external tool (like HWI) that can sign transactions and interact with hardware devices.
+
+## Complete Setup Example with HWI
+
+### Step 1: Install HWI
+
+```bash
+# Clone HWI repository
+git clone https://github.com/bitcoin-core/HWI.git
+cd HWI
+
+# Install dependencies
+pip3 install -r requirements.txt
+
+# Verify installation
+python3 hwi.py --version
+```
+
+### Step 2: Initialize Hardware Wallet
+
+Follow your hardware wallet manufacturer's instructions to:
+
+- Set up a PIN
+- Generate or restore a seed phrase
+- Create a secure backup of your recovery seed
+
+Alternatively, some devices can use HWI commands:
+
+```bash
+# Example: Setup new device (if supported)
+python3 hwi.py setup
+
+# Example: Restore from backup (if supported)
+python3 hwi.py restore
+```
+
+### Step 3: Start Bitcoin Core
+
+```bash
+bitcoind -signer=/path/to/HWI/hwi.py
+```
+
+### Step 4: Enumerate Signers
+
+List connected signing devices:
+
+```bash
+bitcoin-cli enumeratesigners
+```
+
+Example output:
+
+```json
+{
+  "signers": [
+    {
+      "fingerprint": "c8df832a",
+      "name": "Ledger Nano S"
+    }
+  ]
+}
+```
+
+The `fingerprint` is the master key fingerprint that uniquely identifies your device.
+
+### Step 5: Create Wallet
+
+Create a wallet that automatically imports public keys from the hardware device:
+
+```bash
+bitcoin-cli createwallet "my_hardware_wallet" true true "" true true true
+```
+
+Parameters:
+- Wallet name: `"my_hardware_wallet"`
+- `true`: Disable private keys (watch-only)
+- `true`: Blank wallet
+- `""`: Passphrase (empty)
+- `true`: Avoid reuse
+- `true`: Descriptors
+- `true`: External signer
+
+Or use `bitcoin rpc` command:
+
+```bash
+bitcoin rpc createwallet "my_hardware_wallet" true true "" true true true
+```
+
+## Using Your Hardware Wallet
+
+### Generate Receive Address
+
+```bash
+bitcoin-cli -rpcwallet=my_hardware_wallet getnewaddress
+```
+
+Example output:
+```
+bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+```
+
+### Verify Address on Device
+
+Display the address on your hardware wallet screen for verification:
+
+```bash
+bitcoin-cli -rpcwallet=my_hardware_wallet walletdisplayaddress bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+```
+
+The hardware wallet will show the address on its screen. Verify it matches before receiving funds.
+
+<Note>
+Always verify receiving addresses on the device screen to prevent address substitution attacks.
+</Note>
+
+### Send Transaction
+
+Send bitcoin to an address:
+
+```bash
+bitcoin-cli -rpcwallet=my_hardware_wallet sendtoaddress bc1q... 0.001
+```
+
+This will:
+1. Create a Partially Signed Bitcoin Transaction (PSBT)
+2. Prompt your hardware wallet to review and sign
+3. Wait for your confirmation on the device
+4. Broadcast the transaction automatically if signed
+
+Example successful output:
+```json
+{
+  "complete": true,
+  "txid": "a1b2c3d4e5f6..."
+}
+```
+
+<Warning>
+If the hardware wallet is not connected or you cancel on the device, the command will fail. Ensure the device is connected and unlocked before sending.
+</Warning>
+
+## Signer API Specification
+
+Any external signer must conform to this API to be compatible with Bitcoin Core.
+
+### Prerequisites
+
+- Understanding of [Output Descriptors](/descriptors/overview)
+- Familiarity with [PSBT (Partially Signed Bitcoin Transactions)](/transactions/psbt)
+
+### `enumerate` (Required)
+
+Lists available signing devices:
+
+```bash
+<cmd> enumerate
+```
+
+Output:
+```json
+[
+  {
+    "fingerprint": "c8df832a",
+    "name": "Device Name"
+  }
+]
+```
+
+The `fingerprint` field is required. Future extensions may include device capabilities and reachability status.
+
+### `signtransaction` (Required)
+
+Signs a PSBT:
+
+```bash
+<cmd> --fingerprint=<fingerprint> [--testnet] signtransaction <psbt>
+```
+
+Returns base64-encoded signed PSBT.
+
+Requirements:
+- PSBT should include BIP32 derivation paths
+- Should fail if no derivations match device keys
+- Should fail if user cancels on device
+- May validate coin type matches network (mainnet/testnet)
+
+### `getdescriptors` (Optional)
+
+Returns descriptors supported by the device:
+
+```bash
+<cmd> --fingerprint=<fingerprint> [--testnet] getdescriptors <account>
+```
+
+Example output:
+```json
+{
+  "receive": [
+    "pkh([c8df832a/44h/0h/0h]xpub6C.../0/*)#checksum",
+    "sh(wpkh([c8df832a/49h/0h/0h]xpub6B.../0/*))#checksum",
+    "wpkh([c8df832a/84h/0h/0h]xpub6C.../0/*)#checksum"
+  ],
+  "internal": [
+    "pkh([c8df832a/44h/0h/0h]xpub6C.../1/*)#checksum",
+    "sh(wpkh([c8df832a/49h/0h/0h]xpub6B.../1/*))#checksum",
+    "wpkh([c8df832a/84h/0h/0h]xpub6C.../1/*)#checksum"
+  ]
+}
+```
+
+This shows support for legacy, wrapped SegWit, and native SegWit addresses.
+
+### `displayaddress` (Optional)
+
+Displays an address on the device screen:
+
+```bash
+<cmd> --fingerprint=<fingerprint> [--testnet] displayaddress --desc <descriptor>
+```
+
+Example:
+```bash
+hwi.py --fingerprint=c8df832a displayaddress --desc "wpkh([c8df832a/84h/0h/0h]xpub.../0/0)"
+```
+
+Returns:
+```json
+{
+  "address": "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+}
+```
+
+Requirements:
+- Must derive address type from descriptor
+- Must fail if fingerprint or xpub doesn't match device
+- May validate coin type matches network
+
+## How Bitcoin Core Uses the API
+
+### `enumeratesigners` RPC
+
+Calls `<cmd> enumerate` to list devices.
+
+### `createwallet` RPC
+
+Calls:
+```bash
+<cmd> --fingerprint=<fingerprint> getdescriptors 0
+```
+
+Imports descriptors for all supported address types in BIP44/49/84 compatible manner.
+
+### `walletdisplayaddress` RPC
+
+Extracts descriptor from address using `getaddressinfo`, then calls:
+```bash
+<cmd> --fingerprint=<fingerprint> displayaddress --desc=<descriptor>
+```
+
+### `sendtoaddress` and `sendmany` RPCs
+
+Check if inputs have matching `master_fingerprint`, then calls:
+```bash
+<cmd> --fingerprint=<fingerprint> signtransaction <psbt>
+```
+
+Waits for signed PSBT, finalizes, and broadcasts.
+
+## Security Best Practices
+
+1. **Verify on Device**: Always check addresses on the hardware wallet screen
+2. **Secure Backup**: Keep recovery seeds in a safe, offline location
+3. **PIN Protection**: Use a strong PIN on your hardware wallet
+4. **Firmware Updates**: Keep device firmware updated from official sources
+5. **Trusted Tools**: Only use signing tools from reputable sources
+6. **Test First**: Test with small amounts before large transactions
+
+## Troubleshooting
+
+### Device Not Detected
+
+- Ensure device is connected and unlocked
+- Check USB cable and ports
+- Verify HWI has necessary permissions (udev rules on Linux)
+- Try `hwi.py enumerate` directly to test HWI
+
+### Transaction Signing Fails
+
+- Confirm device is unlocked
+- Check that correct wallet is selected on device
+- Verify the device supports the address type being used
+- Ensure PSBT includes BIP32 derivation information
+
+### Address Verification Fails
+
+- Verify device firmware supports address display
+- Check that descriptor matches device's key
+- Ensure correct network (mainnet/testnet)

@@ -1,0 +1,273 @@
+---
+title: Partially Signed Bitcoin Transactions (PSBT)
+description: Understanding and working with PSBTs in Bitcoin Core for collaborative transaction signing
+---
+
+Partially Signed Bitcoin Transactions (PSBT) is an interchange format for Bitcoin transactions that are not fully signed yet, together with relevant metadata to help entities work towards signing it.
+
+PSBT was introduced in [BIP 174](https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki) and has been supported in Bitcoin Core since version 0.17.
+
+## What is PSBT?
+
+PSBT simplifies workflows where multiple parties need to cooperate to produce a transaction. Common use cases include:
+
+- Hardware wallets
+- Multi-signature setups
+- Offline signing
+- CoinJoin transactions
+
+## PSBT Workflow
+
+The PSBT process involves several distinct roles:
+
+<Steps>
+  <Step title="Creator">
+    Proposes a transaction by constructing a PSBT with specific inputs and outputs, but no additional metadata.
+
+    ```bash
+    bitcoin-cli createpsbt \
+      '[{"txid":"txid_here","vout":0}]' \
+      '{"receiving_address":0.01}'
+    ```
+  </Step>
+
+  <Step title="Updater">
+    Adds information about the UTXOs being spent and scripts/public keys involved:
+
+    ```bash
+    bitcoin-cli utxoupdatepsbt "psbt_base64"
+    ```
+  </Step>
+
+  <Step title="Signer">
+    Inspects the transaction and produces partial signatures for inputs they control:
+
+    ```bash
+    bitcoin-cli walletprocesspsbt "psbt_base64"
+    ```
+  </Step>
+
+  <Step title="Combiner (if needed)">
+    Merges metadata from different PSBTs for the same transaction:
+
+    ```bash
+    bitcoin-cli combinepsbt '["psbt1_base64", "psbt2_base64"]'
+    ```
+  </Step>
+
+  <Step title="Finalizer">
+    Converts partial signatures into final scriptSig and scriptWitness:
+
+    ```bash
+    bitcoin-cli finalizepsbt "psbt_base64"
+    ```
+  </Step>
+
+  <Step title="Extractor">
+    Produces a valid network-format Bitcoin transaction:
+
+    The `finalizepsbt` command outputs the final transaction hex if all inputs are signed.
+  </Step>
+</Steps>
+
+## Bitcoin Core PSBT RPCs
+
+### Creating PSBTs
+
+**createpsbt** - Create a PSBT from inputs and outputs:
+
+```bash
+bitcoin-cli createpsbt \
+  '[{"txid":"abc...","vout":0}]' \
+  '{"tb1q...": 0.01}'
+```
+
+**walletcreatefundedpsbt** - Create and fund a PSBT automatically:
+
+```bash
+bitcoin-cli walletcreatefundedpsbt \
+  '[]' \
+  '{"destination_address": 0.01}'
+```
+
+This command acts as Creator and Updater, adding inputs, change, and metadata.
+
+**converttopsbt** - Convert unsigned raw transaction to PSBT:
+
+```bash
+bitcoin-cli converttopsbt "raw_transaction_hex"
+```
+
+### Processing PSBTs
+
+**walletprocesspsbt** - Add UTXO/key/script data and sign:
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" walletprocesspsbt \
+  "psbt_base64" \
+  true  # sign if possible
+```
+
+**descriptorprocesspsbt** - Sign using specific descriptors:
+
+```bash
+bitcoin-cli descriptorprocesspsbt \
+  "psbt_base64" \
+  '["wpkh(...)#checksum"]'
+```
+
+**utxoupdatepsbt** - Add UTXO information from the UTXO set:
+
+```bash
+bitcoin-cli utxoupdatepsbt "psbt_base64"
+```
+
+<Note>
+  `utxoupdatepsbt` only works for SegWit inputs where UTXO data is available.
+</Note>
+
+### Analyzing PSBTs
+
+**decodepsbt** - Display PSBT in human-readable JSON format:
+
+```bash
+bitcoin-cli decodepsbt "psbt_base64"
+```
+
+**analyzepsbt** - Examine current status and next steps:
+
+```bash
+bitcoin-cli analyzepsbt "psbt_base64"
+```
+
+Returns information about:
+- Missing signatures
+- Next required role
+- Estimated fee and weight
+- Input status
+
+### Combining PSBTs
+
+**combinepsbt** - Merge multiple versions of the same PSBT:
+
+```bash
+bitcoin-cli combinepsbt '["psbt1", "psbt2"]'
+```
+
+Use this when multiple signers independently sign the same PSBT.
+
+**joinpsbts** - Concatenate inputs and outputs from multiple PSBTs:
+
+```bash
+bitcoin-cli joinpsbts '["psbt1", "psbt2"]'
+```
+
+<Warning>
+  `joinpsbts` is for CoinJoin-style transactions where PSBTs have different inputs/outputs. For multi-signature workflows, use `combinepsbt` instead.
+</Warning>
+
+### Finalizing PSBTs
+
+**finalizepsbt** - Finalize and extract the transaction:
+
+```bash
+bitcoin-cli finalizepsbt "psbt_base64"
+```
+
+Returns:
+- `hex` - Final transaction hex (if complete)
+- `complete` - Boolean indicating if all inputs are signed
+
+## Complete PSBT Example
+
+Here's a full workflow creating and signing a PSBT:
+
+<Steps>
+  <Step title="Create and fund PSBT">
+    ```bash
+    PSBT=$(bitcoin-cli walletcreatefundedpsbt \
+      '[]' \
+      '{"tb1qxxx...": 0.01}' \
+      | jq -r '.psbt')
+    ```
+  </Step>
+
+  <Step title="Analyze the PSBT">
+    ```bash
+    bitcoin-cli analyzepsbt "$PSBT"
+    ```
+  </Step>
+
+  <Step title="Sign with wallet">
+    ```bash
+    SIGNED=$(bitcoin-cli walletprocesspsbt "$PSBT" \
+      | jq -r '.psbt')
+    ```
+  </Step>
+
+  <Step title="Finalize and broadcast">
+    ```bash
+    HEX=$(bitcoin-cli finalizepsbt "$SIGNED" | jq -r '.hex')
+    bitcoin-cli sendrawtransaction "$HEX"
+    ```
+  </Step>
+</Steps>
+
+## PSBT for Offline Signing
+
+PSBTs are essential for offline signing workflows:
+
+1. **Online wallet** creates unsigned PSBT
+2. Transfer PSBT to **offline wallet** (via USB, QR code, etc.)
+3. **Offline wallet** signs the PSBT
+4. Transfer signed PSBT back to **online wallet**
+5. **Online wallet** broadcasts the transaction
+
+See the [Offline Signing guide](/transactions/offline-signing) for detailed instructions.
+
+## Security Considerations
+
+<Warning>
+  Always verify PSBT contents before signing:
+  - Check all output addresses
+  - Verify amounts and fees
+  - Ensure inputs belong to your wallet
+  - Use `decodepsbt` and `analyzepsbt` to inspect details
+</Warning>
+
+## Advanced Features
+
+### Custom Signing
+
+Sign only specific inputs:
+
+```bash
+bitcoin-cli walletprocesspsbt "$PSBT" true "ALL" 0
+```
+
+The last parameter specifies which input to sign.
+
+### Sighash Types
+
+Specify different signature hash types:
+
+```bash
+bitcoin-cli walletprocesspsbt "$PSBT" true "ALL|ANYONECANPAY"
+```
+
+Available sighash types:
+- `ALL` (default)
+- `NONE`
+- `SINGLE`
+- `ALL|ANYONECANPAY`
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Multi-signature" icon="users" href="/transactions/multisig">
+    Use PSBTs for multi-signature transactions
+  </Card>
+  <Card title="Offline Signing" icon="shield" href="/transactions/offline-signing">
+    Sign transactions on an air-gapped machine
+  </Card>
+</CardGroup>

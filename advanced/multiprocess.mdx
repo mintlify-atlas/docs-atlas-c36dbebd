@@ -1,0 +1,226 @@
+---
+title: Multiprocess Architecture
+description: Run Bitcoin Core components in separate processes for improved isolation and flexibility
+---
+
+The multiprocess feature allows Bitcoin Core to run node, wallet, and GUI components in separate processes, communicating via IPC (Inter-Process Communication). This provides better isolation, security, and flexibility.
+
+## What is Multiprocess Bitcoin?
+
+Multiprocess Bitcoin splits the traditional monolithic `bitcoind` and `bitcoin-qt` binaries into separate executables:
+
+- `bitcoin-node` - Handles P2P networking and RPC
+- `bitcoin-wallet` - Manages wallet operations
+- `bitcoin-gui` - Provides the graphical interface
+
+These processes communicate via socket pairs using the Cap'n Proto protocol, allowing them to run:
+- In separate address spaces for better isolation
+- On different machines
+- In different environments
+- With independent lifecycles (start/stop components separately)
+
+## When to Use Multiprocess
+
+Multiprocess architecture is beneficial when you need:
+
+- **Enhanced Security**: Isolate wallet operations from network code
+- **Flexibility**: Run components on different machines (e.g., wallet on secure offline system)
+- **Debugging**: Easier to debug individual components in isolation
+- **Development**: Test components independently
+- **Resource Management**: Allocate resources differently to each component
+
+<Note>
+Multiprocess is currently experimental. Future versions will expand functionality to support remote components and independent lifecycle management.
+</Note>
+
+## Building with Multiprocess Support
+
+### Unix/Linux Build
+
+Multiprocess is enabled by default on Unix systems:
+
+```bash
+cmake -B build -DENABLE_IPC=ON
+cmake --build build
+```
+
+### Dependencies
+
+Multiprocess requires [Cap'n Proto](https://capnproto.org/) to be installed. Install dependencies according to your platform:
+
+- See `build-unix.md` for Linux instructions
+- See `build-osx.md` for macOS instructions
+
+### Using the Depends System
+
+Alternatively, use the depends system to avoid manual dependency installation:
+
+```bash
+cd <BITCOIN_SOURCE_DIRECTORY>
+make -C depends NO_QT=1
+
+# Check depends/ directory for your platform subdirectory
+HOST_PLATFORM="x86_64-pc-linux-gnu"
+
+cmake -B build --toolchain=depends/$HOST_PLATFORM/toolchain.cmake
+cmake --build build
+```
+
+The depends system automatically handles IPC settings (controlled by `NO_IPC=1` option).
+
+### Cross-Compiling
+
+When cross-compiling without depends, specify native code generation tools:
+
+```bash
+cmake -B build \
+  -DMPGEN_EXECUTABLE=/path/to/mpgen \
+  -DCAPNP_EXECUTABLE=/path/to/capnp \
+  -DCAPNPC_CXX_EXECUTABLE=/path/to/capnpc-c++
+cmake --build build
+```
+
+### External libmultiprocess
+
+By default, libmultiprocess is built from sources at `src/ipc/libmultiprocess/`. To use an external installation:
+
+```bash
+# Install libmultiprocess externally first
+# Then build Bitcoin Core
+cmake -B build -DWITH_EXTERNAL_LIBMULTIPROCESS=ON
+cmake --build build
+```
+
+Set `CMAKE_PREFIX_PATH` if libmultiprocess is installed in a non-standard location:
+
+```bash
+export CMAKE_PREFIX_PATH=/path/to/libmultiprocess/install
+cmake -B build -DWITH_EXTERNAL_LIBMULTIPROCESS=ON
+cmake --build build
+```
+
+## Usage
+
+### Running Multiprocess Binaries
+
+The recommended way is using the `bitcoin` CLI with the `-m` flag:
+
+```bash
+# Run multiprocess node
+bitcoin -m node -regtest -printtoconsole -debug=ipc
+
+# Run multiprocess GUI
+bitcoin -m gui -printtoconsole -debug=ipc
+```
+
+When using `-m` (or `--multiprocess`):
+- `bitcoin -m node` executes `bitcoin-node` instead of `bitcoind`
+- `bitcoin -m gui` executes `bitcoin-gui` instead of `bitcoin-qt`
+
+<Warning>
+Direct invocation of `bitcoin-node`, `bitcoin-wallet`, or `bitcoin-gui` is not recommended as they may change or be renamed in future releases.
+</Warning>
+
+### Debugging IPC Communication
+
+Enable IPC debugging to see requests and responses between processes:
+
+```bash
+bitcoin -m node -debug=ipc -printtoconsole
+```
+
+This shows detailed IPC communication logs, helpful for development and troubleshooting.
+
+### Running Tests
+
+Run functional tests with multiprocess:
+
+```bash
+BITCOIN_CMD="bitcoin -m" build/test/functional/test_runner.py
+```
+
+## Current Features
+
+Multiprocess binaries currently:
+- Function the same as monolithic binaries
+- Support an additional `-ipcbind` option for IPC configuration
+- Provide better process isolation
+
+## Future Features
+
+Planned enhancements include:
+
+### Independent Process Spawning
+
+After PR [#10102](https://github.com/bitcoin/bitcoin/pull/10102):
+
+- `bitcoin-gui` will spawn `bitcoin-node` for P2P and RPC
+- `bitcoin-node` will spawn `bitcoin-wallet` for wallet operations
+- Components communicate over socket pairs
+
+### Remote Connection Support
+
+PR [#19460](https://github.com/bitcoin/bitcoin/pull/19460) adds:
+
+```bash
+# Connect a new wallet process to existing node
+bitcoin-wallet -ipcconnect <address>
+```
+
+PR [#19461](https://github.com/bitcoin/bitcoin/pull/19461) adds:
+
+```bash
+# Connect a new GUI process to existing node
+bitcoin-gui -ipcconnect <address>
+```
+
+These features enable:
+- Running wallet on a secure, isolated machine
+- Running GUI remotely while node runs on a server
+- Starting/stopping components independently
+
+## Example: Development Setup
+
+```bash
+# Build with depends
+cd bitcoin
+make -C depends NO_QT=1
+HOST_PLATFORM="x86_64-pc-linux-gnu"
+cmake -B build --toolchain=depends/$HOST_PLATFORM/toolchain.cmake
+cmake --build build
+
+# Run in regtest mode with IPC debugging
+build/bin/bitcoin -m node -regtest -printtoconsole -debug=ipc
+
+# In another terminal, interact via RPC
+build/bin/bitcoin-cli -regtest getblockchaininfo
+```
+
+## Example: Production Setup
+
+```bash
+# Install dependencies
+sudo apt-get install libcapnp-dev
+
+# Build Bitcoin Core
+cmake -B build -DENABLE_IPC=ON
+cmake --build build
+sudo cmake --install build
+
+# Run multiprocess node
+bitcoin -m node -daemon
+
+# Check it's running
+bitcoin-cli getnetworkinfo
+```
+
+## Security Considerations
+
+- Each process runs in its own address space
+- Memory corruption in one component doesn't affect others
+- Wallet operations are isolated from network code
+- Future versions will support running components on separate machines for enhanced security
+
+<Note>
+While multiprocess improves isolation, it's still experimental. Use caution in production environments and keep Bitcoin Core updated.
+</Note>

@@ -1,0 +1,474 @@
+---
+title: "Utility RPC Methods"
+description: "Validation, signing, and utility functions for Bitcoin Core RPC interface"
+---
+
+# Utility RPC Methods
+
+Utility RPCs provide various helper functions including address validation, message signing, descriptor utilities, and fee estimation.
+
+## Address Validation
+
+### validateaddress
+
+Validates a Bitcoin address and returns information about it.
+
+<ParamField name="address" type="string" required>
+  Bitcoin address to validate
+</ParamField>
+
+```bash
+bitcoin-cli validateaddress "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
+```
+
+<ResponseField name="isvalid" type="boolean">
+  Whether address is valid
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  The validated bitcoin address
+</ResponseField>
+
+<ResponseField name="scriptPubKey" type="string">
+  Hex-encoded scriptPubKey
+</ResponseField>
+
+<ResponseField name="isscript" type="boolean">
+  Whether address is a script address
+</ResponseField>
+
+<ResponseField name="iswitness" type="boolean">
+  Whether address is a witness address
+</ResponseField>
+
+<ResponseField name="witness_version" type="number">
+  Witness version (0 for P2WPKH/P2WSH, 1 for P2TR)
+</ResponseField>
+
+<ResponseField name="witness_program" type="string">
+  Hex-encoded witness program
+</ResponseField>
+
+<Note>
+This RPC only validates the address format. For wallet-specific information (like ownership), use the wallet's `getaddressinfo` RPC.
+</Note>
+
+## Message Signing
+
+### signmessagewithprivkey
+
+Signs a message with a private key.
+
+<ParamField name="privkey" type="string" required>
+  Private key (WIF format)
+</ParamField>
+
+<ParamField name="message" type="string" required>
+  Message to sign
+</ParamField>
+
+```bash
+bitcoin-cli signmessagewithprivkey "privkey" "my message"
+```
+
+<ResponseField name="result" type="string">
+  Base64-encoded signature
+</ResponseField>
+
+<Warning>
+Never expose private keys. This RPC is primarily for testing. For wallet-managed keys, use the wallet's `signmessage` RPC.
+</Warning>
+
+### verifymessage
+
+Verifies a signed message.
+
+<ParamField name="address" type="string" required>
+  Bitcoin address that signed the message
+</ParamField>
+
+<ParamField name="signature" type="string" required>
+  Base64-encoded signature
+</ParamField>
+
+<ParamField name="message" type="string" required>
+  Message that was signed
+</ParamField>
+
+```bash
+bitcoin-cli verifymessage "bc1q..." "signature" "my message"
+```
+
+<ResponseField name="result" type="boolean">
+  Whether signature is valid
+</ResponseField>
+
+## Descriptor Utilities
+
+### getdescriptorinfo
+
+Analyzes a descriptor and returns information about it.
+
+<ParamField name="descriptor" type="string" required>
+  Output descriptor
+</ParamField>
+
+```bash
+bitcoin-cli getdescriptorinfo "wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)"
+```
+
+<ResponseField name="descriptor" type="string">
+  Canonical descriptor with computed checksum
+</ResponseField>
+
+<ResponseField name="checksum" type="string">
+  Checksum for the descriptor
+</ResponseField>
+
+<ResponseField name="isrange" type="boolean">
+  Whether descriptor is ranged
+</ResponseField>
+
+<ResponseField name="issolvable" type="boolean">
+  Whether descriptor is solvable
+</ResponseField>
+
+<ResponseField name="hasprivatekeys" type="boolean">
+  Whether descriptor has private keys
+</ResponseField>
+
+### deriveaddresses
+
+Derives addresses from a descriptor.
+
+<ParamField name="descriptor" type="string" required>
+  Output descriptor
+</ParamField>
+
+<ParamField name="range" type="number | array">
+  Range for derivation:
+  - Single number: Derive at this index
+  - Array [begin, end]: Derive range of indices
+</ParamField>
+
+```bash
+# Derive single address
+bitcoin-cli deriveaddresses "wpkh([d34db33f/84h/0h/0h]xpub.../0/*)#checksum" 0
+
+# Derive range of addresses
+bitcoin-cli deriveaddresses "wpkh([d34db33f/84h/0h/0h]xpub.../0/*)#checksum" "[0,2]"
+```
+
+<ResponseField name="result" type="array">
+  Array of derived Bitcoin addresses
+</ResponseField>
+
+## Fee Estimation
+
+### estimatesmartfee
+
+Estimates the fee rate needed for confirmation within target blocks.
+
+<ParamField name="conf_target" type="number" required>
+  Confirmation target in blocks (1-1008)
+</ParamField>
+
+<ParamField name="estimate_mode" type="string" default="conservative">
+  Fee estimate mode:
+  - `unset`: Use node default
+  - `economical`: Lower fee estimate
+  - `conservative`: Higher fee estimate (recommended)
+</ParamField>
+
+```bash
+# Estimate fee for confirmation in 6 blocks
+bitcoin-cli estimatesmartfee 6
+
+# Economical estimate
+bitcoin-cli estimatesmartfee 6 "economical"
+```
+
+<ResponseField name="feerate" type="number">
+  Estimated fee rate in BTC/kvB
+</ResponseField>
+
+<ResponseField name="blocks" type="number">
+  Block number where estimate was found
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  Array of error messages (if any)
+</ResponseField>
+
+<Note>
+Fee estimation requires the node to have observed sufficient transaction history. New nodes may not have enough data for accurate estimates.
+</Note>
+
+## Data Encoding
+
+### createrawtransaction
+
+Creates a raw transaction (hex-encoded).
+
+<ParamField name="inputs" type="array" required>
+  Array of transaction inputs:
+  - `txid`: Transaction ID
+  - `vout`: Output index
+  - `sequence`: Sequence number (optional)
+</ParamField>
+
+<ParamField name="outputs" type="array | object" required>
+  Array or object of outputs:
+  - Object: `{"address": amount, ...}`
+  - Array: `[{"address": amount}, {"data": "hex"}, ...]`
+</ParamField>
+
+<ParamField name="locktime" type="number" default="0">
+  Transaction locktime
+</ParamField>
+
+<ParamField name="replaceable" type="boolean" default="false">
+  Mark as BIP125 replaceable (RBF)
+</ParamField>
+
+```bash
+# Create transaction
+bitcoin-cli createrawtransaction \
+  '[{"txid":"mytxid","vout":0}]' \
+  '{"bc1q...": 0.01}'
+```
+
+<ResponseField name="result" type="string">
+  Hex-encoded raw transaction
+</ResponseField>
+
+### decoderawtransaction
+
+Decodes a raw transaction to JSON.
+
+<ParamField name="hexstring" type="string" required>
+  Hex-encoded raw transaction
+</ParamField>
+
+<ParamField name="iswitness" type="boolean">
+  Whether transaction is witness-serialized
+</ParamField>
+
+```bash
+bitcoin-cli decoderawtransaction "020000000001..."
+```
+
+Returns detailed transaction object with all inputs, outputs, and metadata.
+
+### decodescript
+
+Decodes a hex-encoded script.
+
+<ParamField name="hexstring" type="string" required>
+  Hex-encoded script
+</ParamField>
+
+```bash
+bitcoin-cli decodescript "76a914..."
+```
+
+<ResponseField name="asm" type="string">
+  Script assembly representation
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Script type (e.g., pubkeyhash, scripthash, witness_v0_keyhash)
+</ResponseField>
+
+<ResponseField name="reqSigs" type="number">
+  Required signatures (deprecated)
+</ResponseField>
+
+<ResponseField name="addresses" type="array">
+  Array of bitcoin addresses (deprecated)
+</ResponseField>
+
+<ResponseField name="p2sh" type="string">
+  P2SH address for this script
+</ResponseField>
+
+<ResponseField name="segwit" type="object">
+  Segwit-specific information
+</ResponseField>
+
+## PSBT Utilities
+
+### decodepsbt
+
+Decodes a PSBT (Partially Signed Bitcoin Transaction) to JSON.
+
+<ParamField name="psbt" type="string" required>
+  Base64-encoded PSBT
+</ParamField>
+
+```bash
+bitcoin-cli decodepsbt "cHNidP8BAH..."
+```
+
+Returns detailed PSBT structure including:
+- Transaction details
+- Input metadata (UTXOs, signatures, derivation paths)
+- Output metadata
+- Unknown fields
+
+### combinepsbt
+
+Combines multiple PSBTs into one.
+
+<ParamField name="txs" type="array" required>
+  Array of base64-encoded PSBTs
+</ParamField>
+
+```bash
+bitcoin-cli combinepsbt '["psbt1", "psbt2"]'
+```
+
+<ResponseField name="result" type="string">
+  Combined PSBT (base64)
+</ResponseField>
+
+### finalizepsbt
+
+Finalizes a PSBT if possible.
+
+<ParamField name="psbt" type="string" required>
+  Base64-encoded PSBT
+</ParamField>
+
+<ParamField name="extract" type="boolean" default="true">
+  Extract and return complete transaction when finalizing
+</ParamField>
+
+```bash
+bitcoin-cli finalizepsbt "cHNidP8BAH..."
+```
+
+<ResponseField name="psbt" type="string">
+  Base64-encoded PSBT (if not extracted or not complete)
+</ResponseField>
+
+<ResponseField name="hex" type="string">
+  Hex-encoded network transaction (if complete and extracted)
+</ResponseField>
+
+<ResponseField name="complete" type="boolean">
+  Whether transaction is complete
+</ResponseField>
+
+### analyzepsbt
+
+Analyzes a PSBT and provides information about what is missing.
+
+<ParamField name="psbt" type="string" required>
+  Base64-encoded PSBT
+</ParamField>
+
+```bash
+bitcoin-cli analyzepsbt "cHNidP8BAH..."
+```
+
+<ResponseField name="inputs" type="array">
+  Analysis of each input (missing signatures, pubkeys, etc.)
+</ResponseField>
+
+<ResponseField name="estimated_vsize" type="number">
+  Estimated virtual size of final transaction
+</ResponseField>
+
+<ResponseField name="estimated_feerate" type="number">
+  Estimated feerate (BTC/kvB)
+</ResponseField>
+
+<ResponseField name="fee" type="number">
+  Transaction fee in BTC
+</ResponseField>
+
+<ResponseField name="next" type="string">
+  Role of next signer: signer, finalizer, extractor
+</ResponseField>
+
+## Miscellaneous
+
+### getindexinfo
+
+Returns status of optional indices.
+
+<ParamField name="index_name" type="string">
+  Specific index to query (txindex, coinstatsindex, blockfilterindex)
+</ParamField>
+
+```bash
+# Get all indices
+bitcoin-cli getindexinfo
+
+# Get specific index
+bitcoin-cli getindexinfo "txindex"
+```
+
+<ResponseField name="synced" type="boolean">
+  Whether index is synced to chain tip
+</ResponseField>
+
+<ResponseField name="best_block_height" type="number">
+  Height index is synced to
+</ResponseField>
+
+### logging
+
+Gets and sets logging configuration.
+
+<ParamField name="include" type="array">
+  Log categories to enable
+</ParamField>
+
+<ParamField name="exclude" type="array">
+  Log categories to disable
+</ParamField>
+
+```bash
+# Get current logging configuration
+bitcoin-cli logging
+
+# Enable net and mempool logging
+bitcoin-cli logging '["net", "mempool"]' '["http"]'
+```
+
+Available log categories:
+- `net`: Network messages
+- `tor`: Tor connection info
+- `mempool`: Mempool operations
+- `http`: HTTP server
+- `bench`: Benchmarking
+- `zmq`: ZMQ notifications
+- `walletdb`: Wallet database operations
+- `rpc`: RPC calls
+- `estimatefee`: Fee estimation
+- `addrman`: Address manager
+- `selectcoins`: Coin selection
+- `validation`: Block/transaction validation
+- And more...
+
+### uptime
+
+Returns the total uptime of the server in seconds.
+
+```bash
+bitcoin-cli uptime
+```
+
+<ResponseField name="result" type="number">
+  Server uptime in seconds
+</ResponseField>
+
+### echo
+
+Echoes back input arguments (for testing).
+
+```bash
+bitcoin-cli echo "test" 123
+```

@@ -1,0 +1,125 @@
+---
+title: "REST Interface Overview"
+description: "Learn about Bitcoin Core's unauthenticated REST API, configuration, consistency guarantees, and limitations"
+---
+
+## Introduction
+
+Bitcoin Core provides an unauthenticated REST interface for querying blockchain data and network information. The REST API offers a simple HTTP-based alternative to the JSON-RPC interface for read-only operations.
+
+## Enabling the REST Interface
+
+The REST API is disabled by default. Enable it using the `-rest` configuration option:
+
+```bash
+bitcoind -rest
+```
+
+Or in your `bitcoin.conf` file:
+
+```
+rest=1
+```
+
+## Network Configuration
+
+The REST interface runs on the same port as the JSON-RPC interface:
+
+| Network | Port |
+|---------|------|
+| Mainnet | 8332 |
+| Testnet | 18332 |
+| Testnet4 | 48332 |
+| Signet | 38332 |
+| Regtest | 18443 |
+
+## Authentication
+
+The REST interface is **unauthenticated**. Unlike the JSON-RPC interface, REST endpoints do not require credentials. This makes the interface simpler to use but means you should be careful about exposing it to untrusted networks.
+
+<Warning>
+**Security Consideration**: Since the REST interface is unauthenticated, avoid exposing it directly to the internet. Use firewall rules or a reverse proxy to restrict access to trusted clients only.
+</Warning>
+
+## Response Formats
+
+Most REST endpoints support multiple output formats specified by the file extension:
+
+| Format | Extension | Content-Type |
+|--------|-----------|-------------|
+| Binary | `.bin` | `application/octet-stream` |
+| Hexadecimal | `.hex` | `text/plain` |
+| JSON | `.json` | `application/json` |
+
+Example:
+```bash
+# Get block in JSON format
+curl http://localhost:8332/rest/block/BLOCK_HASH.json
+
+# Get block in hexadecimal format
+curl http://localhost:8332/rest/block/BLOCK_HASH.hex
+
+# Get block in binary format
+curl http://localhost:8332/rest/block/BLOCK_HASH.bin
+```
+
+<Note>
+Some endpoints like `/rest/chaininfo` only support JSON output format.
+</Note>
+
+## Consistency Guarantees
+
+The REST interface provides the same consistency guarantees as the JSON-RPC interface:
+
+- All endpoints operate on a consistent view of the blockchain state
+- Queries may return stale data during reorgs or when the node is catching up
+- For critical applications, verify block confirmations independently
+
+## Limitations and Warnings
+
+### File Descriptor Exhaustion
+
+<Warning>
+There is a known issue where too many simultaneous HTTP connections can cause the node to crash due to running out of available file descriptors.
+</Warning>
+
+To mitigate this:
+
+1. **Increase system file descriptor limits**: Adjust your OS settings to allow more open files
+2. **Rate limit connections**: If you control the clients, avoid opening hundreds of simultaneous connections
+3. **Use connection pooling**: Reuse HTTP connections instead of creating new ones for each request
+
+### Cross-Site Scripting (XSS) Risk
+
+<Warning>
+**Browser Risk**: Running a web browser on the same machine as a REST-enabled Bitcoin node poses a privacy risk.
+</Warning>
+
+Malicious websites could potentially:
+- Execute requests like `<script src="http://127.0.0.1:8332/rest/tx/TXID.json">`
+- Read transaction and block data from your node
+- Compromise your privacy by learning which transactions you're interested in
+
+**Mitigation**: Do not browse untrusted websites on the same machine running a REST-enabled node.
+
+### Transaction Index Requirement
+
+Some endpoints require the transaction index to be enabled:
+
+```bash
+bitcoind -txindex=1 -rest
+```
+
+<ParamField path="txindex" type="boolean" default="false">
+Enable the transaction index to query historical transactions via `/rest/tx/`
+</ParamField>
+
+Without `txindex=1`:
+- `/rest/tx/` only searches the mempool
+- Confirmed transactions cannot be queried
+
+## Next Steps
+
+- Explore [REST Endpoints](/api/rest-endpoints) for detailed endpoint documentation
+- Learn about specific data formats for blocks, transactions, and UTXO queries
+- See complete examples with curl commands

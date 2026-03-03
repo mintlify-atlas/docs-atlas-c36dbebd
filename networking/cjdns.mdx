@@ -1,0 +1,494 @@
+---
+title: "CJDNS Support"
+description: "Configure Bitcoin Core to run on CJDNS, an encrypted IPv6 network with distributed routing"
+---
+
+## Overview
+
+CJDNS is an encrypted IPv6 network that uses public-key cryptography for address allocation and a distributed hash table (DHT) for routing. It provides end-to-end encryption and protection from traffic analysis while maintaining the speed of direct connections.
+
+<Note>
+CJDNS support was added to Bitcoin Core in version 23.0. It provides a complementary privacy option alongside Tor and I2P.
+</Note>
+
+## What is CJDNS?
+
+CJDNS operates like a distributed, shared VPN:
+
+- **Encrypted routing**: All traffic is end-to-end encrypted
+- **Public-key addresses**: IPv6 addresses derived from public keys
+- **DHT routing**: Decentralized routing via distributed hash table
+- **fc00::/8 range**: Uses reserved IPv6 address space
+- **Multiple entry points**: Connect through any peer
+- **Reach any participant**: Direct connectivity to all network members
+
+### How CJDNS Differs from Other Networks
+
+| Feature | CJDNS | Tor | I2P |
+|---------|-------|-----|-----|
+| **Speed** | Fast (direct routing) | Medium | Slow |
+| **Encryption** | End-to-end | Layered (onion) | Garlic routing |
+| **Anonymity** | Source visible | Source hidden | Source visible |
+| **Centralization** | Fully distributed | Directory authorities | Fully distributed |
+| **Traffic analysis** | Protected | Protected | Protected |
+| **Filtering resistance** | High | High | High |
+
+<Tip>
+CJDNS is fast but does not hide the sender and recipient from intermediate routers. It's best used for encrypted, censorship-resistant connectivity rather than anonymity.
+</Tip>
+
+## Installation
+
+<Steps>
+
+<Step title="Install CJDNS">
+Follow the official installation guide:
+
+```bash
+# Clone repository
+git clone https://github.com/cjdelisle/cjdns.git
+cd cjdns
+
+# Build
+./do
+
+# Generate configuration
+./cjdroute --genconf > cjdroute.conf
+```
+
+Full instructions: [How to Install CJDNS](https://github.com/cjdelisle/cjdns#how-to-install-cjdns)
+</Step>
+
+<Step title="Find a Peer">
+You need to connect to at least one CJDNS peer. Use the Hyperboria peer finder:
+
+```bash
+# Clone peer database
+git clone https://github.com/hyperboria/peers hyperboria-peers
+cd hyperboria-peers
+
+# Test available peers
+./testAvailable.py
+```
+
+The script will show available peers with ping results.
+</Step>
+
+<Step title="Configure Peer Connection">
+Copy peer credentials from test results into your `cjdroute.conf`:
+
+```json
+// In cjdroute.conf, find the connectTo section:
+"connectTo":
+{
+    "192.0.2.1:12345":
+    {
+        "login": "default-login",
+        "password": "peer-password-here",
+        "publicKey": "peer-public-key.k",
+        "peerName": "peer-name"
+    }
+}
+```
+</Step>
+
+<Step title="Launch CJDNS">
+**As root (default):**
+
+```bash
+sudo ./cjdroute < cjdroute.conf
+```
+
+**As unprivileged user:**
+
+Follow [non-root user guide](https://github.com/cjdelisle/cjdns/blob/master/doc/non-root-user.md)
+</Step>
+
+<Step title="Verify Connection">
+```bash
+# Check peer connections
+./tools/peerStats
+
+# Should show connected peers with stats
+```
+</Step>
+
+</Steps>
+
+## Bitcoin Core Configuration
+
+Once CJDNS is running, enabling Bitcoin Core support is simple:
+
+```bash
+bitcoind -cjdnsreachable
+```
+
+This single flag tells Bitcoin Core that:
+
+- `fc00::/8` addresses are CJDNS network addresses
+- Not RFC4193 IPv6 local network addresses
+- Should be treated as reachable Internet addresses
+
+### Why -cjdnsreachable is Required
+
+The `fc00::/8` range is normally reserved for IPv6 local networks (RFC4193). The `-cjdnsreachable` flag instructs Bitcoin Core to:
+
+1. Treat incoming `fc00::/8` connections as CJDNS (not local IPv6)
+2. Gossip your `fc00::/8` address to peers if you have one
+3. Perform proper address management for CJDNS peers
+
+Without this flag, Bitcoin Core would ignore CJDNS addresses as unreachable local addresses.
+
+## Configuration Options
+
+### Basic Configuration
+
+```bash
+# Enable CJDNS support
+-cjdnsreachable
+
+# CJDNS-only mode
+-onlynet=cjdns
+
+# Multiple privacy networks
+-cjdnsreachable -onlynet=cjdns -onlynet=i2p -onlynet=onion
+```
+
+### Example Configurations
+
+**CJDNS Only:**
+
+```bash bitcoin.conf
+cjdnsreachable=1
+onlynet=cjdns
+```
+
+**All Privacy Networks:**
+
+```bash bitcoin.conf
+# Tor
+proxy=127.0.0.1:9050
+
+# I2P
+i2psam=127.0.0.1:7656
+
+# CJDNS
+cjdnsreachable=1
+
+# Privacy networks only
+onlynet=onion
+onlynet=i2p
+onlynet=cjdns
+```
+
+**Multi-Network with CJDNS:**
+
+```bash bitcoin.conf
+cjdnsreachable=1
+# No onlynet = use all available networks
+```
+
+**Bridge Node:**
+
+```bash bitcoin.conf
+cjdnsreachable=1
+listen=1
+# Accessible from both CJDNS and clearnet
+```
+
+## Monitoring and Verification
+
+### Check Your CJDNS Address
+
+```bash
+# CLI method
+bitcoin-cli -netinfo
+
+# RPC method  
+bitcoin-cli getnetworkinfo
+
+# Look for addresses starting with fc00::
+```
+
+Example CJDNS address: `fc12:3456:789a:bcde:f012:3456:789a:bcde`
+
+### View CJDNS Peers
+
+```bash
+# Detailed network info
+bitcoin-cli -netinfo 4
+
+# All peer info
+bitcoin-cli getpeerinfo
+
+# Known CJDNS addresses
+bitcoin-cli getnodeaddresses 10 "cjdns"
+
+# Address counts by network
+bitcoin-cli -addrinfo
+```
+
+### Verify CJDNS Connectivity
+
+```bash
+# From CJDNS directory
+./tools/peerStats
+
+# Should show active connections with bandwidth stats
+```
+
+## Network Characteristics
+
+### Performance
+
+CJDNS offers near-native performance:
+
+- **Speed**: Comparable to direct Internet connections
+- **Latency**: Low overhead from encryption
+- **Throughput**: Not significantly limited by network
+- **Scalability**: DHT routing scales well
+
+<Tip>
+CJDNS is the fastest privacy network option, making it ideal for bandwidth-intensive operations like initial blockchain download.
+</Tip>
+
+### Privacy Properties
+
+**What CJDNS provides:**
+- End-to-end encryption
+- Traffic analysis protection
+- Censorship resistance
+- Network filtering resistance
+
+**What CJDNS does NOT provide:**
+- Sender anonymity (intermediate routers see source)
+- Receiver anonymity (intermediate routers see destination)
+- Hiding communication patterns
+
+<Warning>
+CJDNS provides encryption and censorship resistance, not anonymity. Intermediate routers can see who is communicating with whom (but not the content).
+</Warning>
+
+## Use Cases
+
+### Recommended Scenarios
+
+1. **Censorship circumvention**: Access Bitcoin network despite filtering
+2. **Fast privacy option**: Encrypted connections with minimal overhead
+3. **Multi-network redundancy**: Fallback if other networks fail
+4. **Bridge operations**: Connect privacy and clearnet networks
+5. **Initial sync**: Faster than Tor/I2P for blockchain download
+
+### When to Combine Networks
+
+<Note>
+**Network Combinations:**
+
+- **CJDNS + Tor**: Speed + Anonymity
+- **CJDNS + I2P**: Redundancy between fast and slow networks
+- **CJDNS + Clearnet**: Bridge node with encryption option
+- **All privacy nets**: Maximum redundancy and reach
+</Note>
+
+## Advanced Configuration
+
+### Multi-Network Privacy Node
+
+```bash bitcoin.conf
+# Tor support
+proxy=127.0.0.1:9050
+listenonion=1
+
+# I2P support
+i2psam=127.0.0.1:7656
+i2pacceptincoming=1
+
+# CJDNS support
+cjdnsreachable=1
+
+# Privacy networks only
+onlynet=onion
+onlynet=i2p  
+onlynet=cjdns
+
+# Enable listening
+listen=1
+
+# Debug logging
+debug=net
+debug=tor
+debug=i2p
+```
+
+### CJDNS-Only Node
+
+```bash bitcoin.conf
+cjdnsreachable=1
+onlynet=cjdns
+listen=1
+bind=fc00::1  # Your CJDNS address
+```
+
+### CJDNS + Clearnet Bridge
+
+```bash bitcoin.conf
+cjdnsreachable=1
+listen=1
+discover=1
+# No onlynet = accept all network types
+# Acts as bridge between CJDNS and clearnet
+```
+
+## Troubleshooting
+
+### CJDNS Not Running
+
+```
+Couldn't connect to fc00:: addresses
+```
+
+**Solution:**
+
+```bash
+# Check if CJDNS is running
+ps aux | grep cjdroute
+
+# Verify TUN interface exists
+ip addr show | grep tun
+
+# Check peer stats
+cd /path/to/cjdns && ./tools/peerStats
+```
+
+### No CJDNS Peers Found
+
+```bash
+# Check known CJDNS addresses
+bitcoin-cli -addrinfo
+
+# If zero, Bitcoin Core may not have discovered peers yet
+# Try connecting to a known CJDNS Bitcoin node:
+bitcoin-cli addnode "fc00::..." "add"
+```
+
+### Permission Issues
+
+If CJDNS fails to start:
+
+```bash
+# Run as root (default)
+sudo ./cjdroute < cjdroute.conf
+
+# Or configure for non-root user
+# See: https://github.com/cjdelisle/cjdns/blob/master/doc/non-root-user.md
+```
+
+### TUN Interface Issues
+
+```bash
+# Check TUN support
+ls -la /dev/net/tun
+
+# Should exist and be accessible
+# If not, enable TUN module:
+sudo modprobe tun
+```
+
+## Security Considerations
+
+<Note>
+**Best Practices:**
+
+1. **Keep CJDNS updated**: Regular security updates
+2. **Monitor peer connections**: Use `peerStats` regularly
+3. **Firewall rules**: Ensure CJDNS ports are properly configured
+4. **Backup config**: Save `cjdroute.conf` securely
+5. **Peer selection**: Connect to trusted, reliable peers
+</Note>
+
+### Network Exposure Considerations
+
+<Warning>
+Running bridge nodes (CJDNS + clearnet) may allow correlation of identities through:
+- Timing analysis
+- Shared runtime characteristics
+- Connection pattern analysis
+
+Only use bridge mode if you don't require strict identity separation.
+</Warning>
+
+## Performance Tuning
+
+CJDNS performance is generally good by default, but you can optimize:
+
+### Router Configuration
+
+In `cjdroute.conf`:
+
+```json
+// Increase peer connections for better routing
+"maxConnections": 20,
+
+// Enable beacon for local peer discovery (LAN only)
+"beacon": 2,
+
+// Security level (0-4, higher = slower but more secure)
+"security": 2
+```
+
+### Bitcoin Core Settings
+
+```bash bitcoin.conf
+# More connections for CJDNS peers
+maxconnections=150
+
+# Enable CJDNS
+cjdnsreachable=1
+
+# Prioritize CJDNS (optional)
+onlynet=cjdns
+```
+
+## Resources and Documentation
+
+### CJDNS Documentation
+
+- [CJDNS GitHub](https://github.com/cjdelisle/cjdns)
+- [Hyperboria Docs](https://github.com/hyperboria/docs)
+- [Hyperboria Peers](https://github.com/hyperboria/peers)
+- [Non-Root User Setup](https://github.com/cjdelisle/cjdns/blob/master/doc/non-root-user.md)
+
+### Bitcoin Core Integration
+
+- [Bitcoin CJDNS Documentation](https://github.com/bitcoin/bitcoin/blob/master/doc/cjdns.md)
+- [Tor Integration](/networking/tor)
+- [I2P Integration](/networking/i2p)
+
+## Comparison with Other Privacy Networks
+
+### When to Choose CJDNS
+
+**Choose CJDNS if you need:**
+- Fast encrypted connections
+- Censorship resistance
+- Low-latency operations
+- Mesh network architecture
+
+**Choose Tor if you need:**
+- Strong sender anonymity
+- Hidden services
+- Widely deployed network
+
+**Choose I2P if you need:**
+- Fully decentralized architecture
+- Long-lived connections
+- Complementary to Tor
+
+**Best approach**: Use multiple networks for redundancy and maximum reach.
+
+## See Also
+
+- [P2P Network](/networking/p2p-network) - General network configuration
+- [Tor Support](/networking/tor) - Tor privacy network
+- [I2P Support](/networking/i2p) - I2P privacy network
+- [ZMQ Notifications](/networking/zmq) - Event notification system

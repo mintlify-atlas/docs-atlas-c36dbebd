@@ -1,0 +1,118 @@
+---
+title: Building on Windows
+description: Instructions for building Bitcoin Core on Windows using WSL and MinGW-w64
+---
+
+This guide explains how to build Bitcoin Core for Windows.
+
+## Build Options
+
+The following options are known to work for building Bitcoin Core on Windows:
+
+- **On Linux**, using the [Mingw-w64](https://www.mingw-w64.org/) cross compiler tool chain
+- **On Windows**, using [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/about) and Mingw-w64
+- **On Windows**, using [Microsoft Visual Studio](https://visualstudio.microsoft.com) - see [build-windows-msvc.md](./build-windows-msvc.md)
+
+Other options which may work but have not been extensively tested:
+
+- On Windows, using a POSIX compatibility layer such as [cygwin](https://www.cygwin.com/) or [msys2](https://www.msys2.org/)
+
+<Note>
+The instructions below work on Ubuntu and Debian. Make sure the distribution's `g++-mingw-w64-x86-64-posix` package meets the minimum required `g++` version specified in [dependencies.md](/building/dependencies).
+</Note>
+
+## Installing Windows Subsystem for Linux
+
+If you're building on Windows, first install WSL by following the upstream installation instructions:
+
+[WSL Installation Guide](https://learn.microsoft.com/en-us/windows/wsl/install)
+
+## Cross-Compilation for Ubuntu and WSL
+
+The steps below can be performed on Ubuntu or WSL. The depends system will also work on other Linux distributions, however the commands for installing the toolchain will be different.
+
+<Steps>
+  <Step title="Install NSIS (optional)">
+    If you want to build the Windows installer using the `deploy` build target, install NSIS:
+    
+    ```bash
+    apt install nsis
+    ```
+  </Step>
+  
+  <Step title="Clone the repository">
+    Acquire the source in the usual way:
+    
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    cd bitcoin
+    ```
+    
+    <Warning>
+    For WSL, the Bitcoin Core source path MUST be somewhere in the default mount file system (e.g., `/usr/src/bitcoin`), and NOT under `/mnt/d/`. If this is not the case, the dependency autoconf scripts will fail.
+    
+    This means you cannot use a directory located directly on the host Windows file system to perform the build.
+    </Warning>
+  </Step>
+  
+  <Step title="Build using the depends system">
+    Build the dependencies and configure the build:
+    
+    ```bash
+    gmake -C depends HOST=x86_64-w64-mingw32  # Append "-j N" for N parallel jobs
+    cmake -B build --toolchain depends/x86_64-w64-mingw32/toolchain.cmake
+    ```
+    
+    To see all available configuration options:
+    
+    ```bash
+    cmake -B build -LH
+    ```
+  </Step>
+  
+  <Step title="Compile Bitcoin Core">
+    ```bash
+    cmake --build build     # Append "-j N" for N parallel jobs
+    ```
+  </Step>
+</Steps>
+
+## Depends System
+
+For further documentation on the depends system, see README.md in the `depends/` directory of the source code and the [dependencies documentation](/building/dependencies).
+
+## Installation
+
+After building using the Windows subsystem, it can be useful to copy the compiled executables to a directory on the Windows drive in the same directory structure as they appear in the release `.zip` archive.
+
+### Standard Installation
+
+This will install to `c:\workspace\bitcoin`, for example:
+
+```bash
+cmake --install build --prefix /mnt/c/workspace/bitcoin
+```
+
+<Note>
+Due to the presence of debug information, the binaries may be very large.
+</Note>
+
+### Installation Without Debug Symbols
+
+If you do not need debug information, you can prune it during install:
+
+```bash
+cmake --install build --prefix /mnt/c/workspace/bitcoin --strip
+```
+
+### Creating an Installer
+
+You can also create a Windows installer:
+
+```bash
+cmake --build build --target deploy
+```
+
+<Note>
+This requires NSIS to be installed (see Step 1 above).
+</Note>

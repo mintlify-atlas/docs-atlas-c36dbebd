@@ -1,0 +1,275 @@
+---
+title: Wallet Backup and Recovery
+description: Best practices for backing up and restoring Bitcoin Core wallets
+---
+
+Proper wallet backup procedures are critical for protecting your bitcoin. Loss of wallet files and backups results in permanent, irreversible loss of funds.
+
+## Creating Wallet Backups
+
+Always use the `backupwallet` RPC command or the GUI backup feature to ensure the wallet file is in a consistent state during backup.
+
+### Using RPC
+
+```bash
+bitcoin-cli -rpcwallet="wallet-01" backupwallet /home/node01/Backups/backup-01.dat
+```
+
+<Warning>
+The destination parameter must include the filename, not just the directory. Otherwise, the command will return "Error: Wallet backup failed!"
+</Warning>
+
+### Using the GUI
+
+<Steps>
+  <Step title="Select the Wallet">
+    Choose the wallet you want to backup from the `Wallet` dropdown in the upper right corner. If the wallet isn't loaded, open it via `File` > `Open Wallet`.
+  </Step>
+  
+  <Step title="Access Backup Function">
+    Navigate to `File` > `Backup Wallet...`
+  </Step>
+  
+  <Step title="Choose Backup Location">
+    Select a secure location for your backup file. Consider using external storage that will be kept offline.
+  </Step>
+</Steps>
+
+### Never Copy Wallet Files Directly
+
+<Warning>
+Never copy wallet.dat files directly using file system commands while Bitcoin Core is running. This can result in corrupted backups that cannot be restored. Always use the `backupwallet` command or GUI backup feature.
+</Warning>
+
+## Backup Storage Best Practices
+
+### Multiple Secure Locations
+
+Store backup files in multiple locations:
+- External hard drives or USB drives (kept offline)
+- Encrypted cloud storage (with strong encryption)
+- Physical safe or safety deposit box
+- Geographically distributed locations for disaster recovery
+
+### Offline Storage
+
+Keep at least one backup on a device that is never connected to the internet. This protects against:
+- Malware and ransomware
+- Remote attacks
+- Compromised online storage services
+
+### Encryption
+
+If storing backups in potentially insecure locations:
+- Encrypt your wallet with a strong passphrase before backing up
+- Use additional file encryption (e.g., GPG, VeraCrypt) for the backup file
+- Store passphrases separately from backup files
+
+### Regular Testing
+
+Periodically verify that your backups can be restored:
+- Test restoration on a separate system or testnet
+- Verify you have all necessary passphrases
+- Check that backup media hasn't degraded
+
+## Backup Frequency
+
+How often you need to backup depends on your wallet type:
+
+### HD Wallets (Recommended)
+
+For HD wallets created since Bitcoin Core 0.13:
+
+**Single Backup Sufficient**
+
+All future keys are derived from the HD seed, so a single backup can recover all coins received at any time.
+
+**Regular Backups for Metadata**
+
+While a single backup recovers funds, regular backups preserve metadata:
+- Address labels
+- Transaction notes
+- Account organization
+
+Recommendation: Backup weekly or after significant labeling activity.
+
+### Non-HD Legacy Wallets (Deprecated)
+
+For very old wallets created before Bitcoin Core 0.13:
+
+**Frequent Backups Required**
+
+Backup every 100 keys used, or more frequently. If you restore from an old backup, any keys generated after that backup are lost forever.
+
+<Warning>
+Non-HD legacy wallets are extremely risky. If you have one, migrate to a descriptor wallet immediately. See [Wallet Migration](/wallet/migration).
+</Warning>
+
+## After Encryption Events
+
+<Warning>
+CRITICAL: Create a new backup immediately after these events:
+- Encrypting a wallet for the first time
+- Changing the wallet passphrase
+
+These operations generate a new HD seed. Previous backups cannot recover coins received by the new seed.
+</Warning>
+
+```bash
+# After encrypting
+bitcoin-cli -rpcwallet="wallet-01" encryptwallet "newpassphrase"
+# Immediately create new backup
+bitcoin-cli -rpcwallet="wallet-01" backupwallet /secure/location/backup-post-encryption.dat
+```
+
+## Restoring from Backup
+
+Use the `restorewallet` RPC command or the GUI restore feature to recover a wallet from a backup file.
+
+### Using RPC
+
+```bash
+bitcoin-cli restorewallet "restored-wallet" /home/node01/Backups/backup-01.dat
+```
+
+This loads the wallet with the name "restored-wallet".
+
+### Using the GUI
+
+<Steps>
+  <Step title="Access Restore Function">
+    Navigate to `File` > `Restore Wallet...`
+  </Step>
+  
+  <Step title="Select Backup File">
+    Choose the backup file you want to restore from.
+  </Step>
+  
+  <Step title="Name the Wallet">
+    Provide a name for the restored wallet. This can be different from the original name.
+  </Step>
+  
+  <Step title="Wait for Blockchain Rescan">
+    Bitcoin Core will rescan the blockchain to find all transactions related to the restored wallet. This may take considerable time depending on the wallet's age.
+  </Step>
+</Steps>
+
+### Verifying Restoration
+
+After restoration, verify the wallet is complete:
+
+```bash
+bitcoin-cli -rpcwallet="restored-wallet" getwalletinfo
+```
+
+Check:
+- Balance matches expectations
+- Transaction count is reasonable
+- HD seed is present (for HD wallets)
+
+### Accessing the Restored Wallet
+
+Load the restored wallet in the GUI:
+
+```
+File > Open Wallet > Select "restored-wallet"
+```
+
+## Special Considerations
+
+### Encrypted Wallet Restoration
+
+When restoring an encrypted wallet:
+- You'll need the passphrase to send funds
+- The passphrase must be exactly as set originally
+- There is no recovery mechanism for forgotten passphrases
+
+### Metadata Loss
+
+When restoring from old backups:
+- **Funds are recovered**: All coins are accessible
+- **Metadata is lost**: Address labels and transaction notes created after the backup are gone
+- **Cannot be recovered**: Metadata is not stored on the blockchain
+
+### Malware Risks
+
+<Warning>
+Restoring a backup on a compromised computer can expose your wallet to theft:
+- Ensure your system is malware-free before restoration
+- Consider using a clean OS installation for restoration
+- Never connect backups to internet-connected devices unnecessarily
+</Warning>
+
+## Backup Checklist
+
+Before storing significant funds in a wallet:
+
+- [ ] Create initial backup using `backupwallet` or GUI
+- [ ] Store backups in at least 3 different secure locations
+- [ ] Keep at least one backup completely offline
+- [ ] Test restoration procedure on testnet or with small amounts
+- [ ] Document passphrase securely (if encrypted)
+- [ ] Set reminder for regular backup updates
+- [ ] Verify backup media hasn't degraded
+
+## Disaster Recovery Scenarios
+
+### Computer Failure
+
+If your computer fails:
+1. Install Bitcoin Core on a new system
+2. Use `restorewallet` to recover from your backup
+3. Wait for blockchain rescan to complete
+4. Verify balances and transaction history
+
+### Lost Passphrase
+
+<Warning>
+If you lose your wallet passphrase, your funds are permanently lost. There is no recovery mechanism, no backdoor, and no support team that can help. This is by design for security.
+</Warning>
+
+### Stolen Device
+
+If your device is stolen:
+1. If your wallet was encrypted, funds are protected temporarily
+2. Immediately restore wallet on a new secure device
+3. Transfer all funds to a new wallet with a new passphrase
+4. Assume the old wallet is compromised
+
+### Corrupted Wallet File
+
+If your wallet file becomes corrupted:
+1. Do not attempt to repair it manually
+2. Restore from your most recent backup
+3. Accept potential loss of recent metadata
+4. All funds will be recovered (for HD wallets)
+
+## Backup Automation
+
+Consider automating regular backups:
+
+```bash
+#!/bin/bash
+# Example backup script (customize for your setup)
+DATE=$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR="/secure/backup/location"
+WALLET_NAME="wallet-01"
+
+bitcoin-cli -rpcwallet="$WALLET_NAME" backupwallet "$BACKUP_DIR/backup-$DATE.dat"
+
+# Optional: Keep only last 30 backups
+find "$BACKUP_DIR" -name "backup-*.dat" -mtime +30 -delete
+```
+
+<Warning>
+If automating backups, ensure the backup destination is secure. Automated backups to network drives or cloud storage increase exposure to attacks.
+</Warning>
+
+## Key Principles
+
+1. **Multiple backups**: Never rely on a single backup copy
+2. **Offline storage**: Keep at least one backup offline
+3. **Regular testing**: Verify backups can be restored
+4. **Secure passphrases**: Document them separately from backups
+5. **Update after changes**: New backup after encryption changes
+6. **Clean restoration**: Ensure malware-free systems for recovery

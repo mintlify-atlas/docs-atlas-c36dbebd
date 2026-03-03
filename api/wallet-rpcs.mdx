@@ -1,0 +1,596 @@
+---
+title: "Wallet RPC Methods"
+description: "Manage Bitcoin wallets, addresses, and transactions using Bitcoin Core wallet RPC methods"
+---
+
+# Wallet RPC Methods
+
+Wallet RPCs provide functionality for managing wallets, creating and signing transactions, address management, and balance queries.
+
+<Warning>
+Wallet RPCs require the wallet component to be compiled in and at least one wallet to be loaded. Use the `/wallet/<walletname>/` endpoint when multiple wallets are loaded.
+</Warning>
+
+## Wallet Management
+
+### createwallet
+
+Creates a new wallet.
+
+<ParamField name="wallet_name" type="string" required>
+  Name for the new wallet
+</ParamField>
+
+<ParamField name="disable_private_keys" type="boolean" default="false">
+  Create wallet without private keys (watch-only)
+</ParamField>
+
+<ParamField name="blank" type="boolean" default="false">
+  Create a blank wallet (no keys or HD seed)
+</ParamField>
+
+<ParamField name="passphrase" type="string" default="">
+  Encrypt wallet with this passphrase
+</ParamField>
+
+<ParamField name="avoid_reuse" type="boolean" default="false">
+  Avoid reusing addresses (group outputs by address)
+</ParamField>
+
+<ParamField name="descriptors" type="boolean" default="true">
+  Create descriptor wallet
+</ParamField>
+
+<ParamField name="load_on_startup" type="boolean" default="null">
+  Load wallet on node startup
+</ParamField>
+
+<ParamField name="external_signer" type="boolean" default="false">
+  Use external signer (hardware wallet)
+</ParamField>
+
+```bash
+# Create standard descriptor wallet
+bitcoin-cli createwallet "mywallet"
+
+# Create encrypted watch-only wallet
+bitcoin-cli -named createwallet wallet_name="watchonly" disable_private_keys=true passphrase="secret"
+```
+
+<ResponseField name="name" type="string">
+  Wallet name
+</ResponseField>
+
+<ResponseField name="warning" type="string">
+  Warning messages (if any)
+</ResponseField>
+
+### loadwallet
+
+Loads an existing wallet.
+
+<ParamField name="filename" type="string" required>
+  Wallet name or path
+</ParamField>
+
+<ParamField name="load_on_startup" type="boolean" default="null">
+  Load wallet on node startup
+</ParamField>
+
+```bash
+bitcoin-cli loadwallet "mywallet"
+```
+
+### unloadwallet
+
+Unloads a wallet from memory.
+
+<ParamField name="wallet_name" type="string">
+  Wallet name (uses current wallet if omitted)
+</ParamField>
+
+<ParamField name="load_on_startup" type="boolean" default="null">
+  Save load_on_startup setting
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" unloadwallet
+```
+
+### listwallets
+
+Returns a list of currently loaded wallets.
+
+```bash
+bitcoin-cli listwallets
+```
+
+<ResponseField name="result" type="array">
+  Array of wallet names (strings)
+</ResponseField>
+
+### getwalletinfo
+
+Returns information about the wallet.
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" getwalletinfo
+```
+
+<ResponseField name="walletname" type="string">
+  Wallet name
+</ResponseField>
+
+<ResponseField name="walletversion" type="number">
+  Wallet version
+</ResponseField>
+
+<ResponseField name="format" type="string">
+  Database format (bdb, sqlite)
+</ResponseField>
+
+<ResponseField name="balance" type="number">
+  Total confirmed balance in BTC
+</ResponseField>
+
+<ResponseField name="unconfirmed_balance" type="number">
+  Unconfirmed balance in BTC
+</ResponseField>
+
+<ResponseField name="immature_balance" type="number">
+  Immature coinbase balance
+</ResponseField>
+
+<ResponseField name="txcount" type="number">
+  Total number of transactions
+</ResponseField>
+
+<ResponseField name="keypoolsize" type="number">
+  Number of keys in keypool
+</ResponseField>
+
+<ResponseField name="unlocked_until" type="number">
+  Timestamp wallet is unlocked until (encrypted wallets only)
+</ResponseField>
+
+<ResponseField name="descriptors" type="boolean">
+  Whether wallet uses descriptors
+</ResponseField>
+
+## Balance and UTXO Queries
+
+### getbalance
+
+Returns the total available balance.
+
+<ParamField name="dummy" type="string" default="*">
+  Deprecated. Remains for backward compatibility
+</ParamField>
+
+<ParamField name="minconf" type="number" default="0">
+  Minimum number of confirmations
+</ParamField>
+
+<ParamField name="include_watchonly" type="boolean" default="false">
+  Include watch-only addresses
+</ParamField>
+
+<ParamField name="avoid_reuse" type="boolean" default="true">
+  Avoid including dirty addresses
+</ParamField>
+
+```bash
+# Get total balance
+bitcoin-cli -rpcwallet="mywallet" getbalance
+
+# Get balance with at least 6 confirmations
+bitcoin-cli -rpcwallet="mywallet" getbalance "*" 6
+```
+
+<ResponseField name="result" type="number">
+  Total balance in BTC
+</ResponseField>
+
+### getbalances
+
+Returns detailed balance information.
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" getbalances
+```
+
+<ResponseField name="mine" type="object">
+  Balances from outputs the wallet can sign
+  - `trusted`: Confirmed balance
+  - `untrusted_pending`: Unconfirmed balance
+  - `immature`: Immature coinbase balance
+</ResponseField>
+
+<ResponseField name="watchonly" type="object">
+  Watch-only balances (same structure as mine)
+</ResponseField>
+
+### listunspent
+
+Returns array of unspent transaction outputs (UTXOs).
+
+<ParamField name="minconf" type="number" default="1">
+  Minimum confirmations
+</ParamField>
+
+<ParamField name="maxconf" type="number" default="9999999">
+  Maximum confirmations
+</ParamField>
+
+<ParamField name="addresses" type="array">
+  Filter by specific addresses
+</ParamField>
+
+<ParamField name="include_unsafe" type="boolean" default="true">
+  Include outputs that are unsafe to spend
+</ParamField>
+
+<ParamField name="query_options" type="object">
+  Query options: minimumAmount, maximumAmount, maximumCount, minimumSumAmount
+</ParamField>
+
+```bash
+# List all UTXOs with at least 6 confirmations
+bitcoin-cli -rpcwallet="mywallet" listunspent 6
+
+# List UTXOs for specific address
+bitcoin-cli -rpcwallet="mywallet" listunspent 1 9999999 '["bc1q..."]'
+```
+
+<ResponseField name="txid" type="string">
+  Transaction ID
+</ResponseField>
+
+<ResponseField name="vout" type="number">
+  Output index
+</ResponseField>
+
+<ResponseField name="address" type="string">
+  Bitcoin address
+</ResponseField>
+
+<ResponseField name="amount" type="number">
+  Amount in BTC
+</ResponseField>
+
+<ResponseField name="confirmations" type="number">
+  Number of confirmations
+</ResponseField>
+
+<ResponseField name="spendable" type="boolean">
+  Whether output is spendable
+</ResponseField>
+
+<ResponseField name="solvable" type="boolean">
+  Whether output is solvable
+</ResponseField>
+
+<ResponseField name="safe" type="boolean">
+  Whether output is safe to spend
+</ResponseField>
+
+## Address Management
+
+### getnewaddress
+
+Generates a new receiving address.
+
+<ParamField name="label" type="string" default="">
+  Label for the address
+</ParamField>
+
+<ParamField name="address_type" type="string">
+  Address type: legacy, p2sh-segwit, bech32, bech32m
+</ParamField>
+
+```bash
+# Generate bech32 address
+bitcoin-cli -rpcwallet="mywallet" getnewaddress
+
+# Generate with label
+bitcoin-cli -rpcwallet="mywallet" getnewaddress "payment1"
+```
+
+<ResponseField name="result" type="string">
+  New Bitcoin address
+</ResponseField>
+
+### getrawchangeaddress
+
+Generates a new address for receiving change.
+
+<ParamField name="address_type" type="string">
+  Address type: legacy, p2sh-segwit, bech32, bech32m
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" getrawchangeaddress
+```
+
+### getaddressinfo
+
+Returns information about a given address.
+
+<ParamField name="address" type="string" required>
+  Bitcoin address
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" getaddressinfo "bc1q..."
+```
+
+<ResponseField name="address" type="string">
+  The bitcoin address
+</ResponseField>
+
+<ResponseField name="ismine" type="boolean">
+  Whether address belongs to wallet
+</ResponseField>
+
+<ResponseField name="iswatchonly" type="boolean">
+  Whether address is watch-only
+</ResponseField>
+
+<ResponseField name="isscript" type="boolean">
+  Whether address is a script
+</ResponseField>
+
+<ResponseField name="pubkey" type="string">
+  Public key for address
+</ResponseField>
+
+<ResponseField name="label" type="string">
+  Address label
+</ResponseField>
+
+<ResponseField name="hdkeypath" type="string">
+  HD keypath (if address is from HD wallet)
+</ResponseField>
+
+## Sending Transactions
+
+### sendtoaddress
+
+Sends bitcoin to a given address.
+
+<ParamField name="address" type="string" required>
+  Destination bitcoin address
+</ParamField>
+
+<ParamField name="amount" type="number" required>
+  Amount in BTC
+</ParamField>
+
+<ParamField name="comment" type="string" default="">
+  Transaction comment (not in blockchain)
+</ParamField>
+
+<ParamField name="comment_to" type="string" default="">
+  Comment about recipient
+</ParamField>
+
+<ParamField name="subtractfeefromamount" type="boolean" default="false">
+  Subtract fee from amount
+</ParamField>
+
+<ParamField name="replaceable" type="boolean" default="wallet default">
+  Allow transaction to be replaced by fee (BIP125)
+</ParamField>
+
+<ParamField name="conf_target" type="number">
+  Confirmation target in blocks
+</ParamField>
+
+<ParamField name="estimate_mode" type="string" default="unset">
+  Fee estimate mode: unset, economical, conservative
+</ParamField>
+
+```bash
+# Send 0.1 BTC
+bitcoin-cli -rpcwallet="mywallet" sendtoaddress "bc1q..." 0.1
+
+# Send with fee subtracted from amount
+bitcoin-cli -rpcwallet="mywallet" sendtoaddress "bc1q..." 0.1 "" "" true
+```
+
+<ResponseField name="result" type="string">
+  Transaction ID
+</ResponseField>
+
+### sendmany
+
+Sends bitcoin to multiple addresses in one transaction.
+
+<ParamField name="dummy" type="string" default="">
+  Deprecated parameter
+</ParamField>
+
+<ParamField name="amounts" type="object" required>
+  Object with addresses as keys and amounts as values
+</ParamField>
+
+<ParamField name="minconf" type="number" default="1">
+  Minimum confirmations for inputs
+</ParamField>
+
+<ParamField name="comment" type="string" default="">
+  Transaction comment
+</ParamField>
+
+<ParamField name="subtractfeefrom" type="array" default="[]">
+  Array of addresses to subtract fee from
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" sendmany "" '{"bc1q...":0.1,"bc1p...":0.2}'
+```
+
+<ResponseField name="result" type="string">
+  Transaction ID
+</ResponseField>
+
+### send
+
+Experimental RPC for creating and sending transactions with advanced options.
+
+<ParamField name="outputs" type="array" required>
+  Array of output objects with address/amount pairs or data hex string
+</ParamField>
+
+<ParamField name="conf_target" type="number" default="wallet default">
+  Confirmation target in blocks
+</ParamField>
+
+<ParamField name="estimate_mode" type="string" default="unset">
+  Fee estimate mode
+</ParamField>
+
+<ParamField name="fee_rate" type="number">
+  Fee rate in sat/vB (overrides conf_target)
+</ParamField>
+
+<ParamField name="options" type="object">
+  Additional options: add_to_wallet, change_address, change_position, fee_rate, replaceable, etc.
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" send '[{"bc1q...":0.1}]' null "economical"
+```
+
+## Transaction History
+
+### listtransactions
+
+Returns list of transactions for the wallet.
+
+<ParamField name="label" type="string" default="*">
+  Filter by label
+</ParamField>
+
+<ParamField name="count" type="number" default="10">
+  Number of transactions to return
+</ParamField>
+
+<ParamField name="skip" type="number" default="0">
+  Number of transactions to skip
+</ParamField>
+
+<ParamField name="include_watchonly" type="boolean" default="false">
+  Include watch-only addresses
+</ParamField>
+
+```bash
+# List last 100 transactions
+bitcoin-cli -rpcwallet="mywallet" listtransactions "*" 100
+```
+
+### gettransaction
+
+Returns detailed information about an in-wallet transaction.
+
+<ParamField name="txid" type="string" required>
+  Transaction ID
+</ParamField>
+
+<ParamField name="include_watchonly" type="boolean" default="false">
+  Include watch-only addresses
+</ParamField>
+
+<ParamField name="verbose" type="boolean" default="false">
+  Return decoded transaction
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" gettransaction "txid"
+```
+
+<ResponseField name="amount" type="number">
+  Amount in BTC (negative for sends)
+</ResponseField>
+
+<ResponseField name="fee" type="number">
+  Transaction fee (negative, only for sends)
+</ResponseField>
+
+<ResponseField name="confirmations" type="number">
+  Number of confirmations
+</ResponseField>
+
+<ResponseField name="blockhash" type="string">
+  Block hash containing transaction
+</ResponseField>
+
+<ResponseField name="txid" type="string">
+  Transaction ID
+</ResponseField>
+
+<ResponseField name="time" type="number">
+  Transaction time
+</ResponseField>
+
+<ResponseField name="hex" type="string">
+  Raw transaction hex
+</ResponseField>
+
+## Wallet Encryption
+
+### encryptwallet
+
+Encrypts wallet with a passphrase. **This is a one-time operation.**
+
+<ParamField name="passphrase" type="string" required>
+  Passphrase to encrypt wallet
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" encryptwallet "mypassphrase"
+```
+
+<Warning>
+After encryption, the wallet will shut down. You must restart bitcoind to use the encrypted wallet.
+</Warning>
+
+### walletpassphrase
+
+Unlocks wallet for a period of time.
+
+<ParamField name="passphrase" type="string" required>
+  Wallet passphrase
+</ParamField>
+
+<ParamField name="timeout" type="number" required>
+  Time to keep wallet unlocked (seconds)
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" walletpassphrase "mypassphrase" 60
+```
+
+### walletpassphrasechange
+
+Changes wallet passphrase.
+
+<ParamField name="oldpassphrase" type="string" required>
+  Current passphrase
+</ParamField>
+
+<ParamField name="newpassphrase" type="string" required>
+  New passphrase
+</ParamField>
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" walletpassphrasechange "old" "new"
+```
+
+### walletlock
+
+Locks an encrypted wallet.
+
+```bash
+bitcoin-cli -rpcwallet="mywallet" walletlock
+```

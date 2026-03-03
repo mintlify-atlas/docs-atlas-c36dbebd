@@ -1,0 +1,372 @@
+---
+title: "Data Directory Structure"
+description: "Complete guide to Bitcoin Core data directory layout, file locations, and storage requirements"
+---
+
+The data directory is the default location where Bitcoin Core stores all blockchain data, wallet files, configuration, and other runtime files.
+
+## Data Directory Location
+
+### Default Paths
+
+The default data directory varies by operating system:
+
+| Platform | Default Path |
+|----------|-------------|
+| Linux | `~/.bitcoin/` |
+| macOS | `~/Library/Application Support/Bitcoin/` |
+| Windows | `%LOCALAPPDATA%\Bitcoin\` |
+
+### Custom Data Directory
+
+You can specify a custom data directory using the `-datadir` option:
+
+```bash
+bitcoind -datadir=/mnt/bitcoin
+bitcoin-qt -datadir=/custom/path
+```
+
+## Chain-Specific Directories
+
+All content except `bitcoin.conf` is chain-specific. The actual data directory path differs based on the network:
+
+| Chain Option | Subdirectory Path |
+|-------------|------------------|
+| `-chain=main` (default) | `<datadir>/` |
+| `-chain=test` or `-testnet` | `<datadir>/testnet3/` |
+| `-chain=testnet4` or `-testnet4` | `<datadir>/testnet4/` |
+| `-chain=signet` or `-signet` | `<datadir>/signet/` |
+| `-chain=regtest` or `-regtest` | `<datadir>/regtest/` |
+
+<Note>
+  When using testnet, your data is stored in a `testnet3/` subdirectory, not at the root of the data directory.
+</Note>
+
+## Directory Structure
+
+### Root Directory Files
+
+<ParamField path="bitcoin.conf" type="file">
+  User-defined configuration settings. Not written by the software, must be created manually.
+  
+  **Location:** `<datadir>/bitcoin.conf`
+</ParamField>
+
+<ParamField path="settings.json" type="file">
+  Dynamic settings set through GUI or RPC interfaces. Created automatically unless disabled with `-nosettings`.
+  
+  **Location:** `<datadir>/settings.json`
+</ParamField>
+
+<ParamField path="debug.log" type="file">
+  Debug information and general logging. Can be configured with `-debuglogfile` option.
+  
+  **Location:** `<datadir>/debug.log`
+</ParamField>
+
+<ParamField path="bitcoind.pid" type="file">
+  Process ID file. Created at start, deleted on shutdown.
+  
+  **Location:** `<datadir>/bitcoind.pid`
+</ParamField>
+
+<ParamField path=".cookie" type="file">
+  Session RPC authentication cookie. Created at start if used, deleted on shutdown.
+  
+  **Location:** `<datadir>/.cookie`
+</ParamField>
+
+<ParamField path=".lock" type="file">
+  Data directory lock file to prevent multiple instances.
+  
+  **Location:** `<datadir>/.lock`
+</ParamField>
+
+### Network and Peer Files
+
+<ParamField path="peers.dat" type="file">
+  Peer IP address database in custom format.
+  
+  **Location:** `<datadir>/peers.dat`
+</ParamField>
+
+<ParamField path="anchors.dat" type="file">
+  Anchor IP address database. Created on shutdown, deleted at startup. Contains last known outgoing block-relay-only peers.
+  
+  **Location:** `<datadir>/anchors.dat`
+</ParamField>
+
+<ParamField path="banlist.json" type="file">
+  Stores the addresses/subnets of banned nodes.
+  
+  **Location:** `<datadir>/banlist.json`
+</ParamField>
+
+### Mempool and Fee Estimation
+
+<ParamField path="mempool.dat" type="file">
+  Dump of the mempool's transactions. Saved on shutdown if `-persistmempool=1`.
+  
+  **Location:** `<datadir>/mempool.dat`
+</ParamField>
+
+<ParamField path="fee_estimates.dat" type="file">
+  Statistics used to estimate minimum transaction fees required for confirmation.
+  
+  **Location:** `<datadir>/fee_estimates.dat`
+</ParamField>
+
+### Privacy Network Keys
+
+<ParamField path="onion_v3_private_key" type="file">
+  Cached Tor v3 onion service private key for `-listenonion` option.
+  
+  **Location:** `<datadir>/onion_v3_private_key`
+</ParamField>
+
+<ParamField path="i2p_private_key" type="file">
+  Private key for I2P address. Used when `-i2psam=` is specified. Auto-generated if it doesn't exist.
+  
+  **Location:** `<datadir>/i2p_private_key`
+</ParamField>
+
+## Blockchain Data Directories
+
+### blocks/
+
+Contains all blockchain block data. Can be relocated with `-blocksdir` option.
+
+<ParamField path="blocks/blkNNNNN.dat" type="file">
+  Actual Bitcoin blocks in network format. NNNNN is a 5-digit number (e.g., `blk00000.dat`). Each file is up to 128 MiB.
+  
+  **Location:** `<datadir>/blocks/blk*.dat`
+</ParamField>
+
+<ParamField path="blocks/revNNNNN.dat" type="file">
+  Block undo data in custom format. Used to disconnect blocks during reorg.
+  
+  **Location:** `<datadir>/blocks/rev*.dat`
+</ParamField>
+
+<ParamField path="blocks/xor.dat" type="file">
+  Rolling XOR pattern for block and undo data files (obfuscation layer).
+  
+  **Location:** `<datadir>/blocks/xor.dat`
+</ParamField>
+
+<ParamField path="blocks/index/" type="directory">
+  LevelDB database containing block index. Not affected by `-blocksdir` option.
+  
+  **Location:** `<datadir>/blocks/index/`
+</ParamField>
+
+### chainstate/
+
+<ParamField path="chainstate/" type="directory">
+  LevelDB database containing blockchain state. This is a compact representation of all currently unspent transaction outputs (UTXOs) and metadata.
+  
+  **Location:** `<datadir>/chainstate/`
+</ParamField>
+
+## Optional Indexes
+
+These directories only exist if the corresponding index is enabled.
+
+### Transaction Index
+
+<ParamField path="indexes/txindex/" type="directory">
+  LevelDB database for transaction index. Created when `-txindex=1` is set.
+  
+  **Location:** `<datadir>/indexes/txindex/`
+</ParamField>
+
+### Transaction Spender Index
+
+<ParamField path="indexes/txospenderindex/" type="directory">
+  LevelDB database for transaction output spender index. Created when `-txospenderindex=1` is set.
+  
+  **Location:** `<datadir>/indexes/txospenderindex/`
+</ParamField>
+
+### Block Filter Index
+
+<ParamField path="indexes/blockfilter/basic/db/" type="directory">
+  LevelDB database for basic block filters. Created when `-blockfilterindex=basic` is set.
+  
+  **Location:** `<datadir>/indexes/blockfilter/basic/db/`
+</ParamField>
+
+<ParamField path="indexes/blockfilter/basic/fltrNNNNN.dat" type="file">
+  Block filter data files for basic filtertype.
+  
+  **Location:** `<datadir>/indexes/blockfilter/basic/fltr*.dat`
+</ParamField>
+
+### Coin Stats Index
+
+<ParamField path="indexes/coinstatsindex/db/" type="directory">
+  LevelDB database for coin statistics index. Created when `-coinstatsindex=1` is set.
+  
+  **Location:** `<datadir>/indexes/coinstatsindex/db/`
+</ParamField>
+
+## Wallet Directory
+
+### Multi-Wallet Environment
+
+<ParamField path="wallets/" type="directory">
+  Contains wallet files. Can be relocated with `-walletdir` option. If the directory doesn't exist, wallets reside in the data directory root.
+  
+  **Location:** `<datadir>/wallets/`
+</ParamField>
+
+Wallet files are SQLite databases (as of recent versions):
+
+- Named wallets: `wallets/<wallet_name>/wallet.dat`
+- Default wallet: `wallets/wallet.dat`
+
+### SQLite Wallet Files
+
+<ParamField path="wallets/*/wallet.dat" type="file">
+  Personal wallet database containing keys and transactions (SQLite format).
+  
+  **Location:** `<datadir>/wallets/<name>/wallet.dat`
+</ParamField>
+
+<ParamField path="wallets/*/wallet.dat-journal" type="file">
+  SQLite rollback journal file. Created during transactions. Must be kept as safe as `wallet.dat`.
+  
+  **Location:** `<datadir>/wallets/<name>/wallet.dat-journal`
+</ParamField>
+
+<Warning>
+  `wallet.dat` files must not be shared across different node instances. This can result in key-reuse and double-spends due to lack of synchronization.
+</Warning>
+
+<Info>
+  Always use the `backupwallet` RPC command to back up wallets. This ensures the wallet is properly locked and updated before copying.
+</Info>
+
+## GUI Settings
+
+<ParamField path="guisettings.ini.bak" type="file">
+  Backup of former GUI settings after `-resetguisettings` option is used.
+  
+  **Location:** `<datadir>/guisettings.ini.bak`
+</ParamField>
+
+`bitcoin-qt` uses Qt's `QSettings` class for GUI preferences. Settings location is platform-specific:
+
+- **Linux:** `~/.config/Bitcoin/Bitcoin-Qt.conf`
+- **macOS:** `~/Library/Preferences/org.bitcoin.Bitcoin-Qt.plist`
+- **Windows:** Registry or `%APPDATA%\Bitcoin\`
+
+## Storage Requirements
+
+### Full Node (Non-Pruned)
+
+As of 2026, a full archival node requires:
+
+- **Blockchain data:** ~600+ GB (growing continuously)
+- **chainstate:** ~10-15 GB
+- **Transaction index:** ~50-100 GB (if enabled)
+- **Total:** ~650-750+ GB
+
+### Pruned Node
+
+With pruning enabled:
+
+```bash
+bitcoind -prune=550  # Minimum
+bitcoind -prune=10000  # 10 GB
+```
+
+- **Minimum:** 550 MB (blocks) + ~10 GB (chainstate) = ~11 GB
+- **Custom:** Specified size + chainstate
+
+<Note>
+  Pruned nodes cannot serve historical blocks to other peers and cannot use `-txindex`.
+</Note>
+
+## Legacy Files and Directories
+
+These are no longer used by current Bitcoin Core versions:
+
+| Path | Replaced By | Last Used |
+|------|-------------|----------|
+| `banlist.dat` | `banlist.json` | v22.0 |
+| `blktree/` | `blocks/index/` | v0.8.0 |
+| `coins/` | `chainstate/` | v0.8.0 |
+| `blkindex.dat` | Multiple files | v0.8.0 |
+| `blk000?.dat` | `blkNNNNN.dat` | v0.8.0 |
+| `addr.dat` | `peers.dat` | v0.7.0 |
+| `onion_private_key` | `onion_v3_private_key` | v0.21.0 |
+| `database/` (BDB) | SQLite wallets | v23.0+ |
+
+## Filesystem Recommendations
+
+<Warning>
+  On macOS, avoid using the `exFAT` filesystem for the data directory or blocks directory. Multiple reports indicate database corruption and data loss with this filesystem. See [Bitcoin Core Issue #31454](https://github.com/bitcoin/bitcoin/issues/31454).
+</Warning>
+
+Recommended filesystems:
+
+- **Linux:** ext4, XFS, Btrfs
+- **macOS:** APFS, HFS+
+- **Windows:** NTFS
+
+## Best Practices
+
+### Separate Volumes
+
+For better performance and management:
+
+```bash
+# Put blocks on separate fast storage
+bitcoind -datadir=/var/lib/bitcoin -blocksdir=/mnt/fast-storage/blocks
+
+# Put wallets on secure storage
+bitcoind -walletdir=/mnt/secure/wallets
+```
+
+### Backup Strategy
+
+1. **Configuration:** Back up `bitcoin.conf`
+2. **Wallets:** Use `backupwallet` RPC command regularly
+3. **Blockchain:** No backup needed (can be re-downloaded)
+4. **Optional:** Back up `fee_estimates.dat` for faster startup
+
+### Monitoring Disk Usage
+
+```bash
+# Check data directory size
+du -sh ~/.bitcoin
+
+# Check blocks directory
+du -sh ~/.bitcoin/blocks
+
+# Check chainstate size
+du -sh ~/.bitcoin/chainstate
+```
+
+## File Permissions
+
+<Warning>
+  Ensure proper file permissions to protect sensitive data:
+</Warning>
+
+```bash
+# Secure the entire data directory
+chmod 700 ~/.bitcoin
+
+# Wallet files should be especially protected
+chmod 600 ~/.bitcoin/wallets/*/wallet.dat
+
+# Configuration file
+chmod 600 ~/.bitcoin/bitcoin.conf
+```
+
+## See Also
+
+- [bitcoin.conf Configuration File](/configuration/bitcoin-conf) - Configuration file format and options
+- [Command-Line Options](/configuration/command-line-options) - All available command-line arguments

@@ -1,0 +1,366 @@
+---
+title: Building on BSD Systems
+description: Instructions for building Bitcoin Core on FreeBSD, OpenBSD, and NetBSD
+---
+
+This guide describes how to build bitcoind, command-line utilities, and GUI on BSD systems.
+
+<Tabs>
+  <Tab title="FreeBSD">
+    **Updated for FreeBSD 14.3**
+    
+    ## Preparation
+    
+    ### 1. Install Required Dependencies
+    
+    <Steps>
+      <Step title="Install base dependencies">
+        Run the following as root to install the base dependencies:
+        
+        ```bash
+        pkg install boost-libs cmake git libevent pkgconf
+        ```
+      </Step>
+      
+      <Step title="Install SQLite for wallet support">
+        SQLite is required for wallet functionality:
+        
+        ```bash
+        pkg install sqlite3
+        ```
+        
+        To build without wallet support, use `-DENABLE_WALLET=OFF`.
+      </Step>
+      
+      <Step title="Install Cap'n Proto for IPC">
+        Cap'n Proto is needed for IPC functionality:
+        
+        ```bash
+        pkg install capnproto
+        ```
+        
+        Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
+      </Step>
+    </Steps>
+    
+    ### 2. Clone Bitcoin Repository
+    
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    ```
+    
+    ### 3. Install Optional Dependencies
+    
+    #### GUI Dependencies
+    
+    <Steps>
+      <Step title="Install Qt6">
+        Bitcoin Core includes a GUI built with Qt. To compile the GUI, install Qt and pass `-DBUILD_GUI=ON`:
+        
+        ```bash
+        pkg install qt6-base qt6-tools
+        ```
+      </Step>
+      
+      <Step title="Install libqrencode (optional)">
+        The GUI can encode addresses in QR codes:
+        
+        ```bash
+        pkg install libqrencode
+        ```
+        
+        Otherwise, use `-DWITH_QRENCODE=OFF` to disable this feature.
+      </Step>
+    </Steps>
+    
+    #### ZeroMQ Notifications
+    
+    Bitcoin Core can provide notifications via ZeroMQ:
+    
+    ```bash
+    pkg install libzmq4
+    ```
+    
+    #### Test Suite Dependencies
+    
+    To run the test suite (recommended), install Python 3:
+    
+    ```bash
+    pkg install python3 databases/py-sqlite3 net/py-pyzmq
+    ```
+    
+    ## Building Bitcoin Core
+    
+    ### 1. Configuration
+    
+    <CodeGroup>
+    
+    ```bash Wallet and GUI
+    cmake -B build -DBUILD_GUI=ON
+    ```
+    
+    ```bash No Wallet or GUI
+    cmake -B build -DENABLE_WALLET=OFF
+    ```
+    
+    ```bash View all options
+    cmake -B build -LH
+    ```
+    
+    </CodeGroup>
+    
+    ### 2. Compile
+    
+    ```bash
+    cmake --build build     # Append "-j N" for N parallel jobs
+    ctest --test-dir build  # Append "-j N" for N parallel tests
+    ```
+  </Tab>
+  
+  <Tab title="OpenBSD">
+    **Updated for OpenBSD 7.8**
+    
+    ## Preparation
+    
+    ### 1. Install Required Dependencies
+    
+    <Steps>
+      <Step title="Install base dependencies">
+        Run the following as root:
+        
+        ```bash
+        pkg_add git cmake boost libevent
+        ```
+      </Step>
+      
+      <Step title="Install SQLite for wallet support">
+        ```bash
+        pkg_add sqlite3
+        ```
+        
+        To build without wallet support, use `-DENABLE_WALLET=OFF`.
+      </Step>
+      
+      <Step title="Install Cap'n Proto for IPC">
+        ```bash
+        pkg_add capnproto
+        ```
+        
+        Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
+      </Step>
+    </Steps>
+    
+    ### 2. Clone Bitcoin Repository
+    
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    ```
+    
+    ### 3. Install Optional Dependencies
+    
+    #### GUI Dependencies
+    
+    <Steps>
+      <Step title="Install Qt6">
+        ```bash
+        pkg_add qt6-qtbase qt6-qttools
+        ```
+      </Step>
+      
+      <Step title="Install libqrencode (optional)">
+        ```bash
+        pkg_add libqrencode
+        ```
+        
+        Otherwise, use `-DWITH_QRENCODE=OFF` to disable QR code support.
+      </Step>
+    </Steps>
+    
+    #### ZeroMQ Notifications
+    
+    ```bash
+    pkg_add zeromq
+    ```
+    
+    #### Test Suite Dependencies
+    
+    ```bash
+    pkg_add python py3-zmq  # Select the newest version if necessary
+    ```
+    
+    ## Building Bitcoin Core
+    
+    ### 1. Configuration
+    
+    <CodeGroup>
+    
+    ```bash Wallet and GUI
+    cmake -B build -DBUILD_GUI=ON
+    ```
+    
+    ```bash View all options
+    cmake -B build -LH
+    ```
+    
+    </CodeGroup>
+    
+    ### 2. Compile
+    
+    ```bash
+    cmake --build build     # Append "-j N" for N parallel jobs
+    ctest --test-dir build  # Append "-j N" for N parallel tests
+    ```
+    
+    ## Resource Limits
+    
+    <Warning>
+    The standard ulimit restrictions in OpenBSD are very strict and may not be enough to compile some `.cpp` files in the project.
+    </Warning>
+    
+    If the build runs into out-of-memory errors:
+    
+    ### Temporary Fix (Current Shell)
+    
+    If your user is in the `staff` group, you can raise the limit:
+    
+    ```bash
+    ulimit -d 3000000
+    ```
+    
+    This change will only affect the current shell and processes spawned by it.
+    
+    ### Permanent Fix (System-Wide)
+    
+    To make the change system-wide:
+    
+    1. Edit `/etc/login.conf`
+    2. Change `datasize-cur` and `datasize-max`
+    3. Reboot the system
+  </Tab>
+  
+  <Tab title="NetBSD">
+    **Updated for NetBSD 10.1**
+    
+    ## Preparation
+    
+    ### 1. Install Required Dependencies
+    
+    <Steps>
+      <Step title="Install base dependencies">
+        Install dependencies using `pkgin` (or your preferred package manager):
+        
+        ```bash
+        pkgin install git cmake pkg-config boost libevent
+        ```
+      </Step>
+      
+      <Step title="Upgrade GCC">
+        NetBSD currently ships with an older version of `gcc` than is needed to build. You should upgrade your `gcc`:
+        
+        ```bash
+        pkgin install gcc12
+        ```
+        
+        <Note>
+        You'll need to pass the new compiler to CMake during configuration (see Step 5 below).
+        </Note>
+      </Step>
+      
+      <Step title="Install SQLite for wallet support">
+        ```bash
+        pkgin install sqlite3
+        ```
+        
+        To build without wallet support, use `-DENABLE_WALLET=OFF`.
+      </Step>
+      
+      <Step title="Install Cap'n Proto for IPC">
+        ```bash
+        pkgin install capnproto
+        ```
+        
+        Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
+      </Step>
+    </Steps>
+    
+    ### 2. Clone Bitcoin Repository
+    
+    ```bash
+    git clone https://github.com/bitcoin/bitcoin.git
+    ```
+    
+    ### 3. Install Optional Dependencies
+    
+    #### GUI Dependencies
+    
+    <Steps>
+      <Step title="Install Qt6">
+        ```bash
+        pkgin install qt6-qtbase qt6-qttools
+        ```
+      </Step>
+      
+      <Step title="Install libqrencode (optional)">
+        ```bash
+        pkgin install qrencode
+        ```
+        
+        Otherwise, use `-DWITH_QRENCODE=OFF` to disable QR code support.
+      </Step>
+    </Steps>
+    
+    #### ZeroMQ Notifications
+    
+    ```bash
+    pkgin install zeromq
+    ```
+    
+    #### Test Suite Dependencies
+    
+    ```bash
+    pkgin install python313 py313-zmq
+    ```
+    
+    ## Building Bitcoin Core
+    
+    ### 1. Configuration
+    
+    <Warning>
+    You must specify the GCC 12 compiler when configuring:
+    </Warning>
+    
+    <CodeGroup>
+    
+    ```bash Disable wallet and GUI
+    cmake -B build \
+      -DENABLE_WALLET=OFF \
+      -DBUILD_GUI=OFF \
+      -DCMAKE_C_COMPILER="/usr/pkg/gcc12/bin/gcc" \
+      -DCMAKE_CXX_COMPILER="/usr/pkg/gcc12/bin/g++"
+    ```
+    
+    ```bash View all options
+    cmake -B build -LH
+    ```
+    
+    </CodeGroup>
+    
+    ### 2. Compile
+    
+    ```bash
+    cmake --build build     # Append "-j N" for N parallel jobs
+    ctest --test-dir build  # Append "-j N" for N parallel tests
+    ```
+  </Tab>
+</Tabs>
+
+## See Also
+
+<CardGroup cols={2}>
+  <Card title="Dependencies" icon="cube" href="/building/dependencies">
+    Complete overview of all build dependencies
+  </Card>
+  <Card title="Linux/Unix Build" icon="linux" href="/building/unix">
+    Building on Linux and Unix systems
+  </Card>
+</CardGroup>

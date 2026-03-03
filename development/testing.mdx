@@ -1,0 +1,420 @@
+---
+title: Testing
+description: Comprehensive guide to Bitcoin Core's testing frameworks and practices
+---
+
+## Overview
+
+Bitcoin Core includes comprehensive testing infrastructure:
+
+- **Unit tests** - Test individual components using Boost Test framework
+- **Functional tests** - Test bitcoind and utilities through RPC and P2P interfaces  
+- **Fuzz tests** - Discover edge cases and vulnerabilities (see [Fuzzing guide](/development/fuzzing))
+- **Lint tests** - Static analysis checks for code quality
+
+## Unit Tests
+
+### Building and Running
+
+Unit tests are automatically compiled if dependencies are met and tests weren't explicitly disabled.
+
+Run all unit tests:
+
+```bash
+ctest --test-dir build
+```
+
+Run unit tests manually:
+
+```bash
+build/bin/test_bitcoin
+```
+
+List all tests:
+
+```bash
+build/bin/test_bitcoin --list_content
+```
+
+<Tip>
+After modifying a test file, run `cmake --build build`. For non-test file changes, use `cmake --build build --target test_bitcoin` to recompile only what's needed.
+</Tip>
+
+### Running Individual Tests
+
+The `test_bitcoin` runner accepts Boost framework arguments:
+
+```bash
+# See all available options
+build/bin/test_bitcoin --help
+
+# Run specific test file with full logging
+build/bin/test_bitcoin --log_level=all --run_test=getarg_tests
+
+# Short form
+build/bin/test_bitcoin -l all -t getarg_tests
+
+# Run specific test case
+build/bin/test_bitcoin --run_test=getarg_tests/doubledash
+```
+
+### Passing bitcoind Arguments
+
+Use `--` to separate test runner and bitcoind arguments:
+
+```bash
+build/bin/test_bitcoin --log_level=all --run_test=getarg_tests -- -printtoconsole=1
+```
+
+The `-printtoconsole=1` sends debug logging (normally only in `debug.log`) to standard output.
+
+### Test Data Directory
+
+Running `test_bitcoin` creates a temporary data directory at `test_common bitcoin/` within the system's temp directory. Contents vary by test but always include a `debug.log` file.
+
+Specify custom data directory with `-testdatadir`:
+
+```bash
+build/bin/test_bitcoin --run_test=getarg_tests/doubledash -- -testdatadir=/somewhere/mydatadir
+```
+
+This prevents the directory from being deleted after tests complete, useful for inspecting `debug.log`.
+
+### Adding Unit Tests
+
+To add new unit tests:
+
+1. Add file to `src/test/CMakeLists.txt` or `src/wallet/test/CMakeLists.txt` (wallet tests)
+2. Follow naming convention: `<source_filename>_tests.cpp`
+3. Wrap tests in test suite: `<source_filename>_tests`
+4. Add test cases using `BOOST_AUTO_TEST_CASE` functions
+
+Example pattern:
+
+```cpp
+// uint256_tests.cpp
+BOOST_AUTO_TEST_SUITE(uint256_tests)
+
+BOOST_AUTO_TEST_CASE(test_case_name)
+{
+    // Test implementation
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+```
+
+### GUI Unit Tests
+
+Run GUI tests manually:
+
+```bash
+build/bin/test_bitcoin-qt
+```
+
+Add new GUI tests to `src/qt/test/` directory and `src/qt/test/test_main.cpp`.
+
+### Logging in Unit Tests
+
+View test output:
+
+```bash
+# Log file location
+cat build/Testing/Temporary/LastTest.log
+
+# Display failed test logs automatically
+ctest --test-dir build --output-on-failure
+```
+
+Log from within tests using Boost message methods:
+
+```cpp
+BOOST_TEST_MESSAGE("Debug information");
+```
+
+### Debugging Unit Tests
+
+Launch with debugger:
+
+```bash
+gdb build/bin/test_bitcoin
+```
+
+For segmentation faults:
+
+```bash
+gdb build/bin/test_bitcoin
+(gdb) run
+(gdb) bt  # backtrace when fault occurs
+```
+
+Or use [valgrind](https://valgrind.org/).
+
+To generate core dumps:
+
+```bash
+# Allow core dumps
+ulimit -c unlimited
+
+# Run with system error catching disabled  
+build/bin/test_bitcoin --catch_system_errors=no
+
+# Analyze core dump
+gdb build/bin/test_bitcoin core
+(gdb) bt
+```
+
+## Functional Tests
+
+### Prerequisites
+
+Build Bitcoin Core first (see [building instructions](https://github.com/bitcoin/bitcoin/tree/master/doc#building)).
+
+#### Dependencies
+
+**ZMQ tests** - Install python ZMQ library:
+
+```bash
+# Unix
+sudo apt-get install python3-zmq
+
+# macOS
+pip3 install pyzmq
+```
+
+**IPC tests** - Install python IPC library:
+
+```bash
+git clone -b v2.2.1 https://github.com/capnproto/pycapnp
+pip3 install ./pycapnp
+
+# If that fails, try:
+pip3 install ./pycapnp -C force-bundled-libcapnp=True
+
+# Or in a venv:
+python -m venv venv
+venv/bin/pip3 install ./pycapnp -C force-bundled-libcapnp=True
+venv/bin/python3 build/test/functional/interface_ipc.py
+```
+
+**Windows**: Set UTF-8 mode:
+
+```cmd
+set PYTHONUTF8=1
+```
+
+### Running Functional Tests
+
+Run individual test:
+
+```bash
+build/test/functional/feature_rbf.py
+```
+
+Run via test runner:
+
+```bash
+build/test/functional/test_runner.py feature_rbf.py
+```
+
+Run multiple tests:
+
+```bash
+build/test/functional/test_runner.py feature_rbf.py wallet_basic.py
+```
+
+Run all wallet tests (from appropriate directory):
+
+```bash
+build/test/functional/test_runner.py test/functional/wallet*
+```
+
+Run full regression suite:
+
+```bash
+build/test/functional/test_runner.py
+```
+
+Run all tests including extended:
+
+```bash
+build/test/functional/test_runner.py --extended
+```
+
+<Note>
+By default, up to 4 tests run in parallel. Specify job count with `--jobs=n`.
+</Note>
+
+### Backwards Compatibility Tests
+
+Download previous release binaries:
+
+```bash
+test/get_previous_releases.py
+```
+
+Then run tests normally - they'll use the downloaded binaries.
+
+### Speed Up Tests with RAM Disk
+
+Create RAM disk for cache and tmp directories:
+
+**Linux** (4 GiB RAM disk at `/mnt/tmp/`):
+
+```bash
+sudo mkdir -p /mnt/tmp
+sudo mount -t tmpfs -o size=4g tmpfs /mnt/tmp/
+
+# Run tests
+build/test/functional/test_runner.py --cachedir=/mnt/tmp/cache --tmpdir=/mnt/tmp
+
+# Cleanup
+sudo umount /mnt/tmp
+```
+
+**macOS** (4 GiB RAM disk at `/Volumes/ramdisk/`):
+
+```bash
+diskutil erasevolume HFS+ ramdisk $(hdiutil attach -nomount ram://8388608)
+
+# Run tests  
+build/test/functional/test_runner.py --cachedir=/Volumes/ramdisk/cache --tmpdir=/Volumes/ramdisk/tmp
+
+# Cleanup
+umount /Volumes/ramdisk
+```
+
+<Tip>
+RAM disk size depends on parallel jobs. `--jobs=100` might need 4 GiB, while `--jobs=32` needs only ~2.5 GiB.
+</Tip>
+
+### Troubleshooting Functional Tests
+
+#### Resource Contention
+
+Port conflicts can occur if another bitcoind process is running. On Linux, the framework warns about this.
+
+Kill zombie bitcoind processes:
+
+```bash
+killall bitcoind
+# or
+pkill -9 bitcoind
+```
+
+<Note>
+These commands kill ALL bitcoind processes on the system. Don't use if running non-test bitcoind instances.
+</Note>
+
+#### Data Directory Cache
+
+A pre-mined blockchain with 200 blocks is generated and cached in `build/test/cache` on first run. If cache gets corrupted:
+
+```bash
+rm -rf build/test/cache
+killall bitcoind
+```
+
+#### Test Logging
+
+Logging levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+Default behavior:
+- **Via test_runner**: All logs to `test_framework.log`, none to console
+- **Direct run**: All logs to `test_framework.log`, INFO+ to console  
+- **CI**: No console output unless test fails (then dumps all logs)
+
+Log file locations:
+- `<test data directory>/test_framework.log`
+- `<test data directory>/node<node number>/regtest/debug.log`
+
+Change console log level:
+
+```bash
+build/test/functional/test_runner.py -l DEBUG
+```
+
+Combine logs:
+
+```bash
+build/test/functional/combine_logs.py -c <test data directory> | less -r
+```
+
+Trace RPC calls:
+
+```bash
+build/test/functional/test_runner.py --tracerpc feature_rbf.py
+```
+
+Preserve test data:
+
+```bash
+build/test/functional/test_runner.py --nocleanup feature_rbf.py
+```
+
+#### Attaching a Debugger
+
+Attach Python debugger:
+
+```python
+import pdb; pdb.set_trace()
+```
+
+Attach to bitcoind process:
+
+```python
+# Get PID in pdb
+(pdb) self.node[1].process.pid
+
+# Or from temp folder
+cat /tmp/user/1000/test_directory/node1/regtest/bitcoind.pid
+
+# Attach gdb
+gdb /home/example/bitcoind <pid>
+```
+
+Disable RPC timeouts:
+
+```bash
+build/test/functional/wallet_hd.py --timeout-factor 0
+```
+
+#### Profiling with perf
+
+Generate performance profiles on Linux:
+
+```bash
+# Run tests with profiling
+build/test/functional/test_runner.py --perf
+
+# View results
+perf report -i /path/to/datadir/send-big-msgs.perf.data.xxxx --stdio | c++filt | less
+```
+
+## Lint Tests
+
+Lint tests perform static analysis checks. See [test/lint/README.md](https://github.com/bitcoin/bitcoin/tree/master/test/lint) for details.
+
+## Best Practices
+
+### Test Coverage
+
+- Write tests for all new features and bug fixes
+- Aim for high code coverage (see [Developer Notes](/development/developer-notes) for coverage tools)
+- Unit tests for individual component logic
+- Functional tests for integration and end-to-end scenarios
+
+### Test Organization
+
+- One unit test file per source file: `<source>_tests.cpp`
+- One test suite per source file: `<source>_tests`
+- Descriptive test case names that explain what's being tested
+- Group related functional tests in same directory
+
+### Writing Good Tests
+
+- Tests should be deterministic and repeatable
+- Avoid dependencies between test cases
+- Use appropriate assertions with clear failure messages
+- Test both success and failure paths
+- Test edge cases and boundary conditions
+- Keep tests focused and concise

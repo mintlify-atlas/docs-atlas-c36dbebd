@@ -1,0 +1,214 @@
+---
+title: "ZMQ Notification System"
+description: "Overview of Bitcoin Core's ZeroMQ notification interface for real-time block and transaction events"
+---
+
+# ZMQ Notification System
+
+Bitcoin Core's ZeroMQ (ZMQ) notification system provides a real-time, lightweight interface for external applications to receive notifications about blockchain events such as new blocks and transactions.
+
+## What is ZeroMQ?
+
+[ZeroMQ](https://zeromq.org/) is a high-performance asynchronous messaging library that provides message-oriented semantics over various transport protocols including:
+
+- TCP connections
+- Inter-process communication (IPC)
+- Shared memory
+
+ZMQ supports multiple messaging patterns including publish/subscribe, request/reply, and push/pull.
+
+## How Bitcoin Core Uses ZMQ
+
+Bitcoin Core acts as a "border router" that:
+
+- Implements the Bitcoin wire protocol
+- Maintains the local blockchain database
+- Makes consensus decisions
+- Broadcasts transactions into the network
+- Provides a queryable RPC interface
+
+The ZMQ facility extends this functionality by implementing a **publish/subscribe notification interface** that allows external software to receive real-time events without polling.
+
+### Key Characteristics
+
+<Info>
+**Read-Only Interface**: The ZMQ socket in Bitcoin Core is write-only from the daemon's perspective. PUB sockets don't have a read function, so no state is introduced into bitcoind.
+</Info>
+
+<Warning>
+**No Authentication**: No authentication or authorization is performed on connecting clients. The ZMQ port should only be exposed to trusted entities using firewalling or other security measures.
+</Warning>
+
+- **Self-connecting and self-healing**: Connections between endpoints automatically restore after outages
+- **No buffering required**: Subscribers receive complete messages (transactions/blocks) all-at-once
+- **Message-oriented**: Full transactions and blocks are delivered as single messages
+- **Sequence numbers**: Each message includes a sequence number to detect lost notifications
+
+## Prerequisites
+
+### Build Requirements
+
+ZMQ support requires:
+
+- **libzmq >= 4.0.0** - The ZeroMQ C library ([libzmq releases](https://github.com/zeromq/libzmq/releases))
+- Typically packaged as `libzmq3-dev` on Debian/Ubuntu systems
+- The C++ wrapper for ZeroMQ is **not** needed
+
+### Enabling ZMQ Support
+
+By default, ZMQ is not automatically compiled. Enable it during the build configuration:
+
+```bash
+$ cmake -B build -DWITH_ZMQ=ON
+$ cmake --build build
+```
+
+### Client Library Requirements
+
+For Python clients, install PyZMQ:
+
+```bash
+pip install pyzmq
+```
+
+Other languages have their own ZMQ bindings available.
+
+## Configuration
+
+ZMQ notifications are configured via command-line options or `bitcoin.conf`. Each notification type has its own endpoint configuration.
+
+### Basic Configuration Example
+
+```bash
+bitcoind -zmqpubhashtx=tcp://127.0.0.1:28332 \
+         -zmqpubhashblock=tcp://127.0.0.1:28333 \
+         -zmqpubrawtx=tcp://127.0.0.1:28334 \
+         -zmqpubrawblock=tcp://127.0.0.1:28335
+```
+
+### Configuration File Example
+
+In `bitcoin.conf`:
+
+```ini
+# ZMQ Notification endpoints
+zmqpubhashtx=tcp://127.0.0.1:28332
+zmqpubhashblock=tcp://127.0.0.1:28332
+zmqpubrawtx=tcp://127.0.0.1:28332
+zmqpubrawblock=tcp://127.0.0.1:28332
+zmqpubsequence=tcp://127.0.0.1:28332
+```
+
+<Note>
+The same address can be used for multiple notification types. Each notification can also be specified multiple times with different addresses.
+</Note>
+
+### High Water Mark Configuration
+
+The outbound message high water mark (SNDHWM) controls how many messages can be queued before blocking or dropping:
+
+```bash
+bitcoind -zmqpubhashtx=tcp://127.0.0.1:28332 \
+         -zmqpubhashtxhwm=10000
+```
+
+Available high water mark options:
+
+- `-zmqpubhashtxhwm=n`
+- `-zmqpubhashblockhwm=n`
+- `-zmqpubrawblockhwm=n`
+- `-zmqpubrawtxhwm=n`
+- `-zmqpubsequencehwm=n`
+
+The value must be an integer >= 0. Default is `1000`.
+
+## Socket Types and Addresses
+
+The socket type is always **PUB** (publish). Valid ZeroMQ socket addresses include:
+
+| Protocol | Example | Description |
+|----------|---------|-------------|
+| TCP | `tcp://127.0.0.1:28332` | TCP connection (IPv4) |
+| TCP IPv6 | `tcp://[::1]:28333` | TCP connection (IPv6) |
+| IPC | `unix:/tmp/bitcoind.tx.raw` | Unix domain socket |
+
+<Info>
+The `ZMQ_IPV6` option is automatically enabled for IPv6 addresses and `ZMQ_TCP_KEEPALIVE` is enabled for TCP transports.
+</Info>
+
+## Message Structure
+
+All ZMQ messages consist of three parts:
+
+1. **Topic** - String identifying the notification type
+2. **Body** - Message payload (transaction/block data)
+3. **Sequence Number** - 4-byte little-endian unsigned integer
+
+The sequence number is incremented for each message on a given topic and allows clients to detect lost messages.
+
+## Available Notification Types
+
+Bitcoin Core provides five notification types:
+
+| Notification | Topic | Description |
+|--------------|-------|-------------|
+| `-zmqpubhashtx` | `hashtx` | Transaction hash notifications |
+| `-zmqpubhashblock` | `hashblock` | Block hash notifications |
+| `-zmqpubrawtx` | `rawtx` | Raw transaction data |
+| `-zmqpubrawblock` | `rawblock` | Raw block data |
+| `-zmqpubsequence` | `sequence` | Mempool and block sequence events |
+
+See [ZMQ Notifications](/api/zmq-notifications) for detailed information about each notification type.
+
+## Important Considerations
+
+### Data Validation
+
+<Warning>
+Subscribers **must validate** received data. Messages may be out of date, incomplete, or invalid since there is no two-way protocol involvement.
+</Warning>
+
+### Block Reorganizations
+
+For `*block` topics, when the blockchain tip changes:
+
+- Only the new tip is notified
+- Reorganizations may occur without individual block notifications
+- Subscribers must retrieve the chain from the last known block to the new tip
+- The `invalidateblock` RPC does not trigger notifications
+- Use the `sequence` topic for complete block connection/disconnection events
+
+### Message Loss Detection
+
+ZMQ notifications can be lost during transmission. The sequence number allows detection:
+
+```python
+last_seq = {}
+
+def check_sequence(topic, seq):
+    if topic in last_seq:
+        expected = (last_seq[topic] + 1) % (2**32)
+        if seq != expected:
+            print(f"Lost {(seq - expected) % (2**32)} messages on {topic}")
+    last_seq[topic] = seq
+```
+
+### TCP Keepalive
+
+The `ZMQ_TCP_KEEPALIVE` option is enabled, which activates the underlying `SO_KEEPALIVE` socket option. Configure OS-level keepalive settings before connection establishment:
+
+```bash
+# Linux example - set keepalive to 10 minutes
+sudo sysctl -w net.ipv4.tcp_keepalive_time=600
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="ZMQ Notifications" icon="bell" href="/api/zmq-notifications">
+    Learn about each notification type and see code examples
+  </Card>
+  <Card title="RPC Reference" icon="code" href="/api/rpc">
+    Explore Bitcoin Core's JSON-RPC interface
+  </Card>
+</CardGroup>

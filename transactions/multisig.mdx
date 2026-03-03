@@ -1,0 +1,343 @@
+---
+title: Multi-signature Transactions
+description: Create and use multi-signature wallets with Bitcoin Core descriptor wallets and PSBTs
+---
+
+Multi-signature (multisig) wallets require multiple signatures to authorize a transaction. This provides enhanced security by distributing control among multiple parties or devices.
+
+## What is Multisig?
+
+A multisig wallet uses an M-of-N scheme where:
+- **N** is the total number of public keys
+- **M** is the minimum number of signatures required
+
+Common configurations:
+- **2-of-3**: Requires 2 signatures from 3 possible keys
+- **2-of-2**: Requires both parties to sign
+- **3-of-5**: Requires 3 signatures from 5 possible keys
+
+## Prerequisites
+
+This guide uses:
+- Bitcoin Core with descriptor wallet support
+- Signet network for testing (use mainnet for production)
+- `jq` for JSON processing (optional but helpful)
+
+## Creating a 2-of-3 Multisig Wallet
+
+<Steps>
+  <Step title="Create participant wallets">
+    Create three separate descriptor wallets, one for each participant:
+
+    ```bash
+    for n in 1 2 3; do
+      bitcoin-cli -signet createwallet "participant_${n}"
+    done
+    ```
+
+    <Warning>
+      These wallets contain private keys and should only be used for signing multisig transactions. Don't use them directly for receiving funds to avoid address reuse.
+    </Warning>
+  </Step>
+
+  <Step title="Extract xpubs from each wallet">
+    Use `listdescriptors` to get the extended public key (xpub) from each wallet:
+
+    ```bash
+    bitcoin-cli -signet -rpcwallet="participant_1" listdescriptors
+    ```
+
+    Extract the WPKH descriptor and get the xpub portion. With `jq`:
+
+    ```bash
+    XPUB1=$(bitcoin-cli -signet -rpcwallet="participant_1" \
+      listdescriptors | jq -r \
+      '.descriptors[] | select(.desc | startswith("wpkh") and contains("/0/*")) | .desc' \
+      | grep -oP '(?<=\().*(?=\))' | sed 's|/0/\*|/<0;1>/\*|')
+    ```
+
+    Repeat for participant_2 and participant_3.
+  </Step>
+
+  <Step title="Create the multisig descriptor">
+    Combine the xpubs into a sorted multisig descriptor:
+
+    ```bash
+    DESC="wsh(sortedmulti(2,$XPUB1,$XPUB2,$XPUB3))"
+    ```
+
+    - `wsh` - Witness Script Hash (native SegWit)
+    - `sortedmulti(2,...)` - 2-of-3 multisig with BIP 67 key sorting
+    - `<0;1>` - Multipath for external/internal (change) addresses
+  </Step>
+
+  <Step title="Add checksum to descriptor">
+    Calculate and append the descriptor checksum:
+
+    ```bash
+    CHECKSUM=$(bitcoin-cli -signet getdescriptorinfo "$DESC" \
+      | jq -r '.checksum')
+    
+    MULTISIG_DESC="[{\"desc\": \"${DESC}#${CHECKSUM}\", \"active\": true, \"timestamp\": \"now\"}]"
+    ```
+  </Step>
+
+  <Step title="Create watch-only multisig wallet">
+    Create a wallet with private keys disabled:
+
+    ```bash
+    bitcoin-cli -signet createwallet "multisig_wallet" \
+      disable_private_keys=true \
+      blank=true
+    ```
+
+    Import the multisig descriptor:
+
+    ```bash
+    bitcoin-cli -signet -rpcwallet="multisig_wallet" \
+      importdescriptors "$MULTISIG_DESC"
+    ```
+  </Step>
+
+  <Step title="Verify wallet creation">
+    Check wallet info:
+
+    ```bash
+    bitcoin-cli -signet -rpcwallet="multisig_wallet" getwalletinfo
+    ```
+
+    The wallet should show `"private_keys_enabled": false`.
+  </Step>
+</Steps>
+
+## Funding the Multisig Wallet
+
+Generate a receiving address from the multisig wallet:
+
+```bash
+ADDRESS=$(bitcoin-cli -signet -rpcwallet="multisig_wallet" getnewaddress)
+echo $ADDRESS
+```
+
+On signet, get test coins from the faucet:
+
+```bash
+./contrib/signet/getcoins.py -c bitcoin-cli -a $ADDRESS
+```
+
+Or visit [https://signetfaucet.com](https://signetfaucet.com)
+
+Verify balance:
+
+```bash
+bitcoin-cli -signet -rpcwallet="multisig_wallet" getbalances
+```
+
+## Creating a Multisig Transaction
+
+<Steps>
+  <Step title="Create unsigned PSBT">
+    Use the multisig wallet to create a funded PSBT:
+
+    ```bash
+    DEST_ADDR="tb1qxxx..."  # Destination address
+    
+    PSBT=$(bitcoin-cli -signet -rpcwallet="multisig_wallet" \
+      walletcreatefundedpsbt \
+      '[]' \
+      "{\"$DEST_ADDR\": 0.008}" \
+      | jq -r '.psbt')
+    ```
+  </Step>
+
+  <Step title="Analyze the PSBT">
+    Check what signatures are needed:
+
+    ```bash
+    bitcoin-cli -signet analyzepsbt "$PSBT"
+    ```
+
+    This shows missing signatures and estimated fees.
+  </Step>
+
+  <Step title="Sign with first participant">
+    ```bash
+    PSBT_1=$(bitcoin-cli -signet -rpcwallet="participant_1" \
+      walletprocesspsbt "$PSBT" | jq -r '.psbt')
+    ```
+  </Step>
+
+  <Step title="Sign with second participant">
+    ```bash
+    PSBT_2=$(bitcoin-cli -signet -rpcwallet="participant_2" \
+      walletprocesspsbt "$PSBT" | jq -r '.psbt')
+    ```
+
+    <Note>
+      For a 2-of-3 multisig, you only need 2 signatures. The third participant doesn't need to sign.
+    </Note>
+  </Step>
+
+  <Step title="Combine the signatures">
+    ```bash
+    COMBINED=$(bitcoin-cli -signet combinepsbt "[\"$PSBT_1\", \"$PSBT_2\"]") 
+    ```
+  </Step>
+
+  <Step title="Finalize and broadcast">
+    ```bash
+    HEX=$(bitcoin-cli -signet finalizepsbt "$COMBINED" | jq -r '.hex')
+    bitcoin-cli -signet sendrawtransaction "$HEX"
+    ```
+
+    Returns the transaction ID if successful.
+  </Step>
+</Steps>
+
+## Alternative: Sequential Signing
+
+Instead of parallel signing and combining, participants can sign sequentially:
+
+```bash
+# First signature
+PSBT_1=$(bitcoin-cli -signet -rpcwallet="participant_1" \
+  walletprocesspsbt "$PSBT" | jq -r '.psbt')
+
+# Second signature (on already-signed PSBT)
+PSBT_2=$(bitcoin-cli -signet -rpcwallet="participant_2" \
+  walletprocesspsbt "$PSBT_1" | jq -r '.psbt')
+
+# Finalize
+HEX=$(bitcoin-cli -signet finalizepsbt "$PSBT_2" | jq -r '.hex')
+bitcoin-cli -signet sendrawtransaction "$HEX"
+```
+
+## Multisig Descriptor Types
+
+### Native SegWit (Recommended)
+
+```
+wsh(sortedmulti(2,xpub1/<0;1>/*,xpub2/<0;1>/*,xpub3/<0;1>/*))
+```
+
+- Most efficient (lowest fees)
+- Best privacy
+- Modern format
+
+### Nested SegWit (Legacy Compatibility)
+
+```
+sh(wsh(sortedmulti(2,xpub1/<0;1>/*,xpub2/<0;1>/*,xpub3/<0;1>/*)))
+```
+
+- Compatible with older wallets
+- Slightly higher fees than native SegWit
+
+### Legacy (Not Recommended)
+
+```
+sh(sortedmulti(2,xpub1/<0;1>/*,xpub2/<0;1>/*,xpub3/<0;1>/*))
+```
+
+- Highest fees
+- No SegWit benefits
+- Only use if absolutely necessary
+
+## Security Best Practices
+
+<Warning>
+  **Critical Security Measures:**
+  
+  - Store participant wallets on different devices
+  - Never store all private keys in one location
+  - Use hardware wallets for production multisig
+  - Back up all xpubs and the multisig descriptor
+  - Test with small amounts on signet first
+  - Verify all transaction details before signing
+</Warning>
+
+## Recovery and Backup
+
+### What to Backup
+
+1. **Multisig descriptor** (with checksum)
+2. **All participant wallet seeds** (12/24 word phrases)
+3. **Derivation paths** used for xpubs
+
+### Recovering a Multisig Wallet
+
+To recover:
+
+1. Restore participant wallets from seeds
+2. Recreate the multisig descriptor with same xpubs
+3. Import descriptor into a new watch-only wallet
+
+```bash
+bitcoin-cli createwallet "recovered_multisig" \
+  disable_private_keys=true blank=true
+
+bitcoin-cli -rpcwallet="recovered_multisig" \
+  importdescriptors "$MULTISIG_DESC"
+```
+
+## Using sortedmulti vs multisig
+
+**sortedmulti** (Recommended):
+- Implements BIP 67 key sorting
+- Order of xpubs doesn't matter
+- All participants get same addresses
+- Easier wallet recovery
+
+**multisig**:
+- Keys stay in specified order
+- All participants must use exact same order
+- Error-prone for recovery
+
+## Combining with Offline Signing
+
+For maximum security, combine multisig with offline signing:
+
+1. Keep one participant wallet completely offline
+2. Create PSBTs on online watch-only wallet
+3. Sign on offline device
+4. Combine signatures online
+5. Broadcast transaction
+
+See [Offline Signing](/transactions/offline-signing) for details.
+
+## Troubleshooting
+
+### "Insufficient funds" Error
+
+Ensure coins have at least 1 confirmation:
+
+```bash
+bitcoin-cli -signet -rpcwallet="multisig_wallet" listunspent
+```
+
+### "Missing signatures" After Combining
+
+Verify you have enough signatures for M-of-N:
+
+```bash
+bitcoin-cli -signet analyzepsbt "$COMBINED"
+```
+
+### "Could not sign transaction" Error
+
+Check that the participant wallet has the correct private key:
+
+```bash
+bitcoin-cli -signet -rpcwallet="participant_1" getwalletinfo
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="PSBT" icon="file-signature" href="/transactions/psbt">
+    Deep dive into Partially Signed Bitcoin Transactions
+  </Card>
+  <Card title="Offline Signing" icon="shield" href="/transactions/offline-signing">
+    Combine multisig with air-gapped security
+  </Card>
+</CardGroup>

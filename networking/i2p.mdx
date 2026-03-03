@@ -1,0 +1,465 @@
+---
+title: "I2P Support"
+description: "Configure Bitcoin Core to run on the I2P (Invisible Internet Project) network for enhanced privacy"
+---
+
+## Overview
+
+I2P (Invisible Internet Project) is an anonymous network layer that allows for censorship-resistant, peer-to-peer communication. Bitcoin Core supports I2P through the SAM (Simple Anonymous Messaging) protocol, enabling private connections to other I2P peers.
+
+<Note>
+I2P support was added to Bitcoin Core in version 22.0. The network may have fewer peers than Tor or clearnet.
+</Note>
+
+## I2P vs Tor vs CJDNS
+
+| Feature | I2P | Tor | CJDNS |
+|---------|-----|-----|-------|
+| **Source visibility** | Sender visible to receiver | Sender hidden | Sender visible |
+| **Speed** | Slow | Medium | Fast |
+| **Centralization** | Decentralized | Somewhat centralized | Decentralized |
+| **Ports** | No ports (SAM v3.1) | Supports ports | Supports ports |
+| **Use case** | Long-lived connections | General anonymity | Encrypted routing |
+
+## Quick Start
+
+<Steps>
+
+<Step title="Install I2P Router">
+Choose one of the supported I2P implementations:
+
+**Option 1: i2pd (Recommended for Bitcoin Core)**
+
+```bash
+# Debian/Ubuntu
+sudo apt install i2pd
+
+# macOS
+brew install i2pd
+```
+
+**Option 2: Official Java I2P Router**
+
+Download from [geti2p.net](https://geti2p.net)
+
+</Step>
+
+<Step title="Enable SAM Bridge">
+**For i2pd** (enabled by default):
+
+Verify in `/etc/i2pd/i2pd.conf`:
+
+```ini
+[sam]
+enabled = true
+address = 127.0.0.1
+port = 7656
+```
+
+**For Java I2P Router**:
+
+1. Navigate to `http://127.0.0.1:7657/configclients`
+2. Enable "SAM application bridge"
+3. Save and restart I2P
+</Step>
+
+<Step title="Start I2P Router">
+```bash
+# i2pd
+sudo systemctl start i2pd
+sudo systemctl enable i2pd
+
+# Java router
+java -jar i2p.jar
+```
+</Step>
+
+<Step title="Run Bitcoin Core">
+```bash
+bitcoind -i2psam=127.0.0.1:7656
+```
+</Step>
+
+</Steps>
+
+Bitcoin Core will automatically create a persistent I2P address and start accepting I2P connections.
+
+## Configuration Options
+
+### Basic Configuration
+
+```bash
+# Connect to I2P SAM proxy
+-i2psam=<ip:port>
+
+# Accept inbound I2P connections (default: 1)
+-i2pacceptincoming=1
+
+# Only connect to I2P network
+-onlynet=i2p
+
+# Enable I2P debug logging
+-debug=i2p
+```
+
+### Example Configurations
+
+**I2P Only:**
+
+```bash bitcoin.conf
+i2psam=127.0.0.1:7656
+onlynet=i2p
+debug=i2p
+```
+
+**I2P + Tor:**
+
+```bash bitcoin.conf
+proxy=127.0.0.1:9050
+i2psam=127.0.0.1:7656
+onlynet=onion
+onlynet=i2p
+```
+
+**Multi-Network:**
+
+```bash bitcoin.conf
+i2psam=127.0.0.1:7656
+i2pacceptincoming=1
+# No onlynet = connect to all networks
+```
+
+## I2P Addresses
+
+### Persistent vs Transient
+
+Bitcoin Core handles I2P addresses differently based on configuration:
+
+#### Persistent Addresses (Default)
+
+When `-i2pacceptincoming=1` (default):
+
+- Private key saved to `i2p_private_key` in data directory
+- Same address used for all connections (outbound and inbound)
+- Address ends in `.b32.i2p` (52 characters)
+- Designed for long-lived identity
+
+**Example:** `3xjxlz2x2yzzvoa3sccmjx5or3kv6q4zjfm7cj4dlxxr4xvgigmha.b32.i2p`
+
+#### Transient Addresses
+
+When `-i2pacceptincoming=0`:
+
+- Random address generated for each outbound connection
+- No inbound connections accepted
+- Harder to track and fingerprint
+- No persistent identity
+
+<Warning>
+Disabling I2P listening (`-i2pacceptincoming=0`) should only be done if you specifically need transient addresses. It adds delay to connection setup and reduces your contribution to the I2P network.
+</Warning>
+
+### How I2P Addressing Works
+
+Unlike Tor, in I2P:
+
+- The recipient **can see** the sender's I2P address
+- Each connection creates bidirectional tunnels
+- Tunnels are reused for efficiency
+
+<Tip>
+I2P addresses are designed to be long-lived. Frequent address changes reduce performance due to tunnel building overhead.
+</Tip>
+
+## SAM Protocol Details
+
+Bitcoin Core uses SAM v3.1 protocol:
+
+### Port Behavior
+
+SAM v3.1 does not support ports:
+
+- Bitcoin Core sets listening port to `0`
+- Advertises I2P address with port `0`
+- Won't connect to I2P addresses with non-zero ports
+- Compatible with future SAM versions
+
+<Note>
+SAM v3.2+ supports ports, but Bitcoin Core currently uses v3.1 for maximum compatibility. All I2P connections use port 0 from the peer's perspective.
+</Note>
+
+### Compatibility
+
+Any I2P router supporting SAM v3.1 works with Bitcoin Core:
+
+- **i2pd** - Lightweight C++ implementation ✓
+- **Java I2P Router** - Official implementation ✓
+- Other SAM v3.1 compatible routers ✓
+
+## Bandwidth Considerations
+
+### Default Behavior
+
+By default, your Bitcoin Core node:
+
+- Shares bandwidth with the I2P network
+- Participates in transit tunnels
+- Provides cover traffic for anonymity
+- Helps the I2P network function
+
+<Warning>
+It's strongly discouraged to limit I2P bandwidth. Bitcoin nodes should contribute as much to I2P as they consume to maintain network health.
+</Warning>
+
+### Limiting Bandwidth (Not Recommended)
+
+If absolutely necessary, you can limit I2P traffic:
+
+**For i2pd** - Edit `i2pd.conf`:
+
+```ini
+# Total bandwidth: 256 KB/s, share 50%
+bandwidth = 256
+share = 50
+
+[limits]
+# Maximum 20 transit tunnels
+transittunnels = 20
+```
+
+**For Java I2P Router**:
+
+Configure at `http://127.0.0.1:7657/config` under "Bandwidth" tab.
+
+<Tip>
+Before limiting bandwidth, read [Participating Traffic Considerations](https://geti2p.net/en/docs/applications/embedding) in the I2P documentation.
+</Tip>
+
+## Monitoring and Verification
+
+### Check Your I2P Address
+
+```bash
+# CLI method
+bitcoin-cli -netinfo
+
+# RPC method
+bitcoin-cli getnetworkinfo | grep i2p
+
+# Debug log
+grep "AddLocal" ~/.bitcoin/debug.log | grep ".b32.i2p"
+```
+
+### View I2P Peers
+
+```bash
+# Network info with peer details
+bitcoin-cli -netinfo 4
+
+# All peer info
+bitcoin-cli getpeerinfo
+
+# Get known I2P addresses
+bitcoin-cli getnodeaddresses 10 "i2p"
+
+# Address count by network
+bitcoin-cli -addrinfo
+```
+
+### I2P Debug Logging
+
+```bash
+bitcoind -i2psam=127.0.0.1:7656 -debug=i2p
+```
+
+Monitor logs:
+
+```bash
+tail -f ~/.bitcoin/debug.log | grep "i2p:"
+```
+
+## Initial Block Download
+
+<Warning>
+Initial blockchain sync over I2P-only can be very slow due to limited bandwidth and peer availability.
+</Warning>
+
+### Recommended Approach
+
+<Steps>
+
+<Step title="Sync with Multiple Networks">
+Use Tor and I2P together during initial sync:
+
+```bash
+bitcoind -proxy=127.0.0.1:9050 -i2psam=127.0.0.1:7656 -onlynet=onion -onlynet=i2p
+```
+</Step>
+
+<Step title="Monitor Progress">
+```bash
+bitcoin-cli getblockchaininfo | grep verificationprogress
+```
+</Step>
+
+<Step title="Switch to I2P-Only (Optional)">
+After sync completes, optionally switch to I2P-only:
+
+```bash bitcoin.conf
+i2psam=127.0.0.1:7656
+onlynet=i2p
+```
+</Step>
+
+</Steps>
+
+<Tip>
+For fastest sync, consider syncing over clearnet first, then switching to privacy networks after validation completes.
+</Tip>
+
+## Advanced Configuration
+
+### Multi-Network Privacy Setup
+
+Combine I2P with other privacy networks for redundancy:
+
+```bash bitcoin.conf
+# Tor proxy
+proxy=127.0.0.1:9050
+
+# I2P SAM
+i2psam=127.0.0.1:7656
+
+# CJDNS
+cjdnsreachable=1
+
+# Privacy networks only
+onlynet=onion
+onlynet=i2p
+onlynet=cjdns
+
+# Debug logging
+debug=tor
+debug=i2p
+```
+
+### I2P-Only Node
+
+```bash bitcoin.conf
+i2psam=127.0.0.1:7656
+onlynet=i2p
+i2pacceptincoming=1
+debug=i2p
+```
+
+### Outbound-Only I2P
+
+Use transient addresses, no inbound:
+
+```bash bitcoin.conf
+i2psam=127.0.0.1:7656
+i2pacceptincoming=0
+onlynet=i2p
+```
+
+## Troubleshooting
+
+### SAM Bridge Not Available
+
+```
+I2P: SAM proxy is not reachable
+```
+
+**Solution:**
+
+```bash
+# Check if I2P is running
+systemctl status i2pd
+
+# Check SAM port
+netstat -tlnp | grep 7656
+
+# Verify SAM enabled in config
+cat /etc/i2pd/i2pd.conf | grep -A 3 "\[sam\]"
+```
+
+### No I2P Peers
+
+```bash
+# Check known I2P addresses
+bitcoin-cli -addrinfo
+
+# If zero I2P addresses, try restarting
+bitcoin-cli stop
+bitcoind -i2psam=127.0.0.1:7656 -debug=i2p
+```
+
+<Note>
+I2P peer discovery can be slow initially. It may take 15-30 minutes to find I2P peers.
+</Note>
+
+### Connection Timeouts
+
+I2P tunnel building takes time:
+
+- First connection: 30-60 seconds
+- Subsequent connections: 10-30 seconds
+- Tunnel lifetime: 10 minutes (default)
+
+Be patient - this is normal I2P behavior.
+
+## Privacy Recommendations
+
+<Note>
+**Best Practices:**
+
+1. **Use persistent addresses**: Don't disable `-i2pacceptincoming` unless necessary
+2. **Share bandwidth**: Leave default I2P bandwidth sharing enabled
+3. **Combine networks**: Use I2P + Tor for redundancy
+4. **Monitor connections**: Regularly check peer status
+5. **Be patient**: I2P is slower but more decentralized
+</Note>
+
+<Warning>
+Operating on multiple networks (e.g., clearnet and I2P) may allow correlation of your identities. Use single-network mode if unlinkability is critical.
+</Warning>
+
+## Network Comparison
+
+### When to Use I2P
+
+**Advantages:**
+- Fully decentralized (no directory authorities)
+- Both sender and receiver have addresses
+- Good for long-lived connections
+- Complementary to Tor
+
+**Disadvantages:**
+- Slower than Tor and clearnet
+- Fewer Bitcoin peers
+- Longer connection setup time
+- No port support (SAM v3.1)
+
+### Recommended Use Cases
+
+1. **Privacy-focused node**: Combine with Tor for maximum coverage
+2. **Censorship resistance**: Run on multiple privacy networks
+3. **Network redundancy**: Fallback if Tor is blocked
+4. **Bridge node**: Help connect I2P and clearnet networks
+
+## Bundling I2P in Applications
+
+If you're developing an application that bundles Bitcoin Core with I2P:
+
+- Read [General Guidance for Developers](https://geti2p.net/en/docs/api/samv3)
+- Follow [Embedding I2P guidelines](https://geti2p.net/en/docs/applications/embedding)
+- Ensure SAM bridge is properly configured
+- Test with both i2pd and Java router
+
+## See Also
+
+- [P2P Network](/networking/p2p-network) - General network configuration
+- [Tor Support](/networking/tor) - Alternative privacy network
+- [CJDNS Support](/networking/cjdns) - Encrypted IPv6 network
+- [I2P Glossary](https://geti2p.net/en/about/glossary) - I2P terminology
+- [SAM v3 API](https://geti2p.net/en/docs/api/samv3) - Protocol documentation

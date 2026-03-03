@@ -1,0 +1,121 @@
+---
+title: Bitcoin Core documentation
+description: The reference implementation of the Bitcoin protocol - download, validate blocks, and participate in the peer-to-peer network
+---
+
+Bitcoin Core connects to the Bitcoin peer-to-peer network to download and fully validate blocks and transactions. It also includes a wallet and graphical user interface, which can be optionally built.
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card
+    title="Quickstart"
+    icon="rocket"
+    href="/quickstart"
+  >
+    Get Bitcoin Core running in minutes with basic commands
+  </Card>
+  <Card
+    title="Installation"
+    icon="download"
+    href="/installation"
+  >
+    Detailed installation instructions for all platforms
+  </Card>
+</CardGroup>
+
+## Core features
+
+<CardGroup cols={2}>
+  <Card
+    title="Full node validation"
+    icon="check-circle"
+  >
+    Download and fully validate the entire Bitcoin blockchain, ensuring all transactions follow consensus rules
+  </Card>
+  <Card
+    title="Wallet functionality"
+    icon="wallet"
+  >
+    Built-in wallet with support for multiple wallets, PSBT, multisig, and offline signing
+  </Card>
+  <Card
+    title="JSON-RPC interface"
+    icon="terminal"
+  >
+    Comprehensive RPC API for programmatic control of Bitcoin Core operations
+  </Card>
+  <Card
+    title="GUI and headless modes"
+    icon="window"
+  >
+    Run with bitcoin-qt graphical interface or bitcoind headless daemon
+  </Card>
+</CardGroup>
+
+## Important considerations
+
+<Note>
+Bitcoin Core downloads and stores the entire history of Bitcoin transactions, which requires **several hundred gigabytes or more** of disk space. Depending on your computer and network connection, the synchronization process can take anywhere from a few hours to several days or more.
+</Note>
+
+<Warning>
+This is security-critical software. Any mistake might cost people money. Always verify downloads and follow security best practices.
+</Warning>
+
+## Key interfaces
+
+### Command-line tools
+
+Bitcoin Core provides several command-line interfaces:
+
+- **`bitcoin-qt`** - GUI application with visual interface
+- **`bitcoind`** - Headless daemon for server deployments
+- **`bitcoin-cli`** - RPC client for interacting with bitcoind
+- **`bitcoin`** - Wrapper command supporting subcommands like `bitcoin gui`, `bitcoin node`, and `bitcoin rpc`
+
+### Network support
+
+Bitcoin Core supports multiple networks:
+
+- **Mainnet** - The production Bitcoin network
+- **Testnet3/Testnet4** - Test networks for development
+- **Signet** - Signed test network with controlled block generation
+- **Regtest** - Regression test mode for local testing
+
+## Getting help
+
+<CardGroup cols={2}>
+  <Card
+    title="Bitcoin Wiki"
+    icon="book"
+    href="https://en.bitcoin.it/wiki/Main_Page"
+  >
+    Comprehensive Bitcoin documentation and guides
+  </Card>
+  <Card
+    title="Bitcoin StackExchange"
+    icon="stack-overflow"
+    href="https://bitcoin.stackexchange.com"
+  >
+    Ask technical questions and get answers from the community
+  </Card>
+  <Card
+    title="IRC Chat"
+    icon="message"
+    href="https://web.libera.chat/#bitcoin"
+  >
+    Real-time chat on #bitcoin at Libera Chat
+  </Card>
+  <Card
+    title="BitcoinTalk Forums"
+    icon="comments"
+    href="https://bitcointalk.org/index.php?board=4.0"
+  >
+    Technical support board for Bitcoin Core
+  </Card>
+</CardGroup>
+
+## License
+
+Bitcoin Core is released under the terms of the MIT license. See [opensource.org/license/MIT](https://opensource.org/license/MIT) for more information.

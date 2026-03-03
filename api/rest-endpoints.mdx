@@ -1,0 +1,472 @@
+---
+title: "REST Endpoints"
+description: "Complete reference for all Bitcoin Core REST API endpoints with request parameters, response formats, and examples"
+---
+
+## Transactions
+
+### Get Transaction
+
+```
+GET /rest/tx/<TX-HASH>.<bin|hex|json>
+```
+
+Retrieve a transaction by its hash in binary, hexadecimal, or JSON format.
+
+<ParamField path="TX-HASH" type="string" required>
+The transaction hash (txid) in hexadecimal format
+</ParamField>
+
+<ParamField path="format" type="enum" required>
+Output format: `bin`, `hex`, or `json`
+</ParamField>
+
+**Behavior**:
+- By default, only searches the mempool for unconfirmed transactions
+- To query confirmed transactions, enable the transaction index: `txindex=1`
+- Returns `404` if the transaction doesn't exist
+
+**Example**:
+```bash
+# Get transaction in JSON format
+curl http://localhost:8332/rest/tx/0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098.json
+
+# Get transaction in hex format
+curl http://localhost:8332/rest/tx/0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098.hex
+```
+
+---
+
+## Blocks
+
+### Get Block
+
+```
+GET /rest/block/<BLOCK-HASH>.<bin|hex|json>
+```
+
+Retrieve a complete block with full transaction details.
+
+<ParamField path="BLOCK-HASH" type="string" required>
+The block hash in hexadecimal format
+</ParamField>
+
+<ParamField path="format" type="enum" required>
+Output format: `bin`, `hex`, or `json`
+</ParamField>
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/block/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json
+```
+
+<Note>
+The HTTP request and response are handled entirely in-memory. For very large blocks, consider using `/rest/blockpart/` to retrieve partial data.
+</Note>
+
+### Get Block Without Transaction Details
+
+```
+GET /rest/block/notxdetails/<BLOCK-HASH>.<bin|hex|json>
+```
+
+Retrieve a block with only transaction hashes (no full transaction details).
+
+<ParamField path="BLOCK-HASH" type="string" required>
+The block hash in hexadecimal format
+</ParamField>
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/block/notxdetails/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json
+```
+
+<Info>
+This endpoint is more efficient when you only need block metadata and transaction IDs without full transaction data. The option only affects JSON responses.
+</Info>
+
+### Get Block Part
+
+```
+GET /rest/blockpart/<BLOCK-HASH>.<bin|hex>?offset=<OFFSET>&size=<SIZE>
+```
+
+Retrieve a specific byte range from a block's raw data.
+
+<ParamField path="BLOCK-HASH" type="string" required>
+The block hash in hexadecimal format
+</ParamField>
+
+<ParamField query="offset" type="integer" required>
+Byte offset to start reading from
+</ParamField>
+
+<ParamField query="size" type="integer" required>
+Number of bytes to read
+</ParamField>
+
+**Example**:
+```bash
+# Get first 1000 bytes of a block
+curl "http://localhost:8332/rest/blockpart/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.bin?offset=0&size=1000"
+```
+
+<Note>
+Only supports `bin` and `hex` formats. Returns `404` if the block doesn't exist or the byte range is invalid.
+</Note>
+
+---
+
+## Block Headers
+
+### Get Block Headers
+
+```
+GET /rest/headers/<BLOCK-HASH>.<bin|hex|json>?count=<COUNT>
+```
+
+Retrieve a sequence of block headers starting from the specified block hash.
+
+<ParamField path="BLOCK-HASH" type="string" required>
+Starting block hash in hexadecimal format
+</ParamField>
+
+<ParamField query="count" type="integer" default="5">
+Number of headers to return (max: 2000)
+</ParamField>
+
+**Example**:
+```bash
+# Get 10 block headers
+curl "http://localhost:8332/rest/headers/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json?count=10"
+```
+
+<Warning>
+**Deprecated format** (still supported): `/rest/headers/<COUNT>/<BLOCK-HASH>.<format>`
+
+This format has been deprecated since v24.0. Use the query parameter format instead.
+</Warning>
+
+---
+
+## Block Filters
+
+### Get Block Filter Headers
+
+```
+GET /rest/blockfilterheaders/<FILTERTYPE>/<BLOCK-HASH>.<bin|hex|json>?count=<COUNT>
+```
+
+Retrieve block filter headers for BIP 157/158 compact block filters.
+
+<ParamField path="FILTERTYPE" type="string" required>
+Filter type (e.g., `basic` for BIP 158 basic filters)
+</ParamField>
+
+<ParamField path="BLOCK-HASH" type="string" required>
+Starting block hash in hexadecimal format
+</ParamField>
+
+<ParamField query="count" type="integer" default="5">
+Number of filter headers to return (max: 2000)
+</ParamField>
+
+**Example**:
+```bash
+curl "http://localhost:8332/rest/blockfilterheaders/basic/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json?count=5"
+```
+
+<Warning>
+**Deprecated format**: `/rest/blockfilterheaders/<FILTERTYPE>/<COUNT>/<BLOCK-HASH>.<format>` (deprecated since v24.0)
+</Warning>
+
+### Get Block Filter
+
+```
+GET /rest/blockfilter/<FILTERTYPE>/<BLOCK-HASH>.<bin|hex|json>
+```
+
+Retrieve the block filter for a specific block.
+
+<ParamField path="FILTERTYPE" type="string" required>
+Filter type (e.g., `basic`)
+</ParamField>
+
+<ParamField path="BLOCK-HASH" type="string" required>
+Block hash in hexadecimal format
+</ParamField>
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/blockfilter/basic/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json
+```
+
+---
+
+## Block Hash Lookup
+
+### Get Block Hash by Height
+
+```
+GET /rest/blockhashbyheight/<HEIGHT>.<bin|hex|json>
+```
+
+Retrieve the block hash at a specific height in the best block chain.
+
+<ParamField path="HEIGHT" type="integer" required>
+Block height (0 for genesis block)
+</ParamField>
+
+**Example**:
+```bash
+# Get genesis block hash
+curl http://localhost:8332/rest/blockhashbyheight/0.json
+
+# Get block hash at height 500000
+curl http://localhost:8332/rest/blockhashbyheight/500000.hex
+```
+
+---
+
+## Spent Transaction Outputs
+
+### Get Spent Outputs
+
+```
+GET /rest/spenttxouts/<BLOCK-HASH>.<bin|hex|json>
+```
+
+Retrieve a collection of spent transaction outputs for all transactions in a block.
+
+<ParamField path="BLOCK-HASH" type="string" required>
+Block hash in hexadecimal format
+</ParamField>
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/spenttxouts/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json
+```
+
+<Note>
+Returns `404` if:
+- The block doesn't exist
+- The block's undo data is not available (e.g., genesis block, pruned blocks)
+</Note>
+
+---
+
+## Blockchain Information
+
+### Get Chain Info
+
+```
+GET /rest/chaininfo.json
+```
+
+Retrieve various state information about blockchain processing.
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/chaininfo.json
+```
+
+**Response** (equivalent to `getblockchaininfo` RPC):
+```json
+{
+  "chain": "main",
+  "blocks": 750000,
+  "headers": 750000,
+  "bestblockhash": "00000000000000000001c0a...",
+  "difficulty": 37590453655497.09,
+  "time": 1665432100,
+  "mediantime": 1665428500,
+  "verificationprogress": 0.9999,
+  "initialblockdownload": false,
+  "chainwork": "00000000000000000000000000000000000000003a1d...",
+  "size_on_disk": 473245678901,
+  "pruned": false
+}
+```
+
+<Info>
+Only supports JSON output format. See `getblockchaininfo` RPC documentation for complete field descriptions.
+</Info>
+
+### Get Deployment Info
+
+```
+GET /rest/deploymentinfo.json
+GET /rest/deploymentinfo/<BLOCKHASH>.json
+```
+
+Retrieve information about consensus rule deployments (soft forks) at the current chain tip or at a specific block.
+
+<ParamField path="BLOCKHASH" type="string">
+Optional block hash to query deployment status at that block
+</ParamField>
+
+**Example**:
+```bash
+# Get current deployment info
+curl http://localhost:8332/rest/deploymentinfo.json
+
+# Get deployment info at specific block
+curl http://localhost:8332/rest/deploymentinfo/000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f.json
+```
+
+<Info>
+Equivalent to the `getdeploymentinfo` RPC. Only supports JSON format.
+</Info>
+
+---
+
+## UTXO Set Queries
+
+### Query UTXO Set
+
+```
+GET /rest/getutxos/<TXID>-<N>/<TXID>-<N>/.../<TXID>-<N>.<bin|hex|json>
+GET /rest/getutxos/checkmempool/<TXID>-<N>/<TXID>-<N>/.../<TXID>-<N>.<bin|hex|json>
+```
+
+Query the UTXO set for specific outpoints.
+
+<ParamField path="TXID" type="string" required>
+Transaction ID in hexadecimal format
+</ParamField>
+
+<ParamField path="N" type="integer" required>
+Output index (vout)
+</ParamField>
+
+<ParamField path="checkmempool" type="boolean">
+Include mempool in the query (optional path segment)
+</ParamField>
+
+**Limitations**:
+- Maximum 15 outpoints per request
+- Follows BIP64 serialization format for binary/hex outputs
+
+**Example**:
+```bash
+# Query single UTXO
+curl http://localhost:18332/rest/getutxos/b2cdfd7b89def827ff8af7cd9bff7627ff72e5e8b0f71210f92ea7a4000c5d75-0.json
+
+# Query multiple UTXOs including mempool
+curl http://localhost:18332/rest/getutxos/checkmempool/TXID1-0/TXID2-1/TXID3-0.json
+```
+
+**JSON Response**:
+```json
+{
+  "chainHeight": 325347,
+  "chaintipHash": "00000000fb01a7f3745a717f8caebee056c484e6e0bfe4a9591c235bb70506fb",
+  "bitmap": "1",
+  "utxos": [
+    {
+      "height": 2147483647,
+      "value": 8.8687,
+      "scriptPubKey": {
+        "asm": "OP_DUP OP_HASH160 1c7cebb529b86a04c683dfa87be49de35bcf589e OP_EQUALVERIFY OP_CHECKSIG",
+        "desc": "addr(mi7as51dvLJsizWnTMurtRmrP8hG2m1XvD)#gj9tznmy",
+        "hex": "76a9141c7cebb529b86a04c683dfa87be49de35bcf589e88ac",
+        "type": "pubkeyhash",
+        "address": "mi7as51dvLJsizWnTMurtRmrP8hG2m1XvD"
+      }
+    }
+  ]
+}
+```
+
+<Info>
+**BIP64 Reference**: Binary and hex formats follow [BIP64](https://github.com/bitcoin/bips/blob/master/bip-0064.mediawiki) serialization.
+</Info>
+
+---
+
+## Mempool
+
+### Get Mempool Info
+
+```
+GET /rest/mempool/info.json
+```
+
+Retrieve information about the memory pool.
+
+**Example**:
+```bash
+curl http://localhost:8332/rest/mempool/info.json
+```
+
+**Response**:
+```json
+{
+  "loaded": true,
+  "size": 5000,
+  "bytes": 2500000,
+  "usage": 10000000,
+  "total_fee": 0.05,
+  "maxmempool": 300000000,
+  "mempoolminfee": 0.00001000,
+  "minrelaytxfee": 0.00001000
+}
+```
+
+<Info>
+Equivalent to the `getmempoolinfo` RPC. Only supports JSON format.
+</Info>
+
+### Get Mempool Contents
+
+```
+GET /rest/mempool/contents.json?verbose=<true|false>&mempool_sequence=<false|true>
+```
+
+Retrieve all transactions currently in the mempool.
+
+<ParamField query="verbose" type="boolean" default="true">
+Include detailed transaction information
+</ParamField>
+
+<ParamField query="mempool_sequence" type="boolean" default="false">
+Include mempool sequence number (cannot be combined with verbose=true)
+</ParamField>
+
+**Example**:
+```bash
+# Get verbose mempool contents
+curl http://localhost:8332/rest/mempool/contents.json
+
+# Get compact mempool with sequence
+curl "http://localhost:8332/rest/mempool/contents.json?verbose=false&mempool_sequence=true"
+```
+
+<Note>
+**Availability**: Query parameters for `verbose` and `mempool_sequence` are available in Bitcoin Core v25.0 and later.
+</Note>
+
+<Warning>
+**Incompatible Options**: Cannot use `verbose=true` and `mempool_sequence=true` together. Set `verbose=false` when requesting mempool sequence values.
+</Warning>
+
+---
+
+## Error Responses
+
+All endpoints return appropriate HTTP status codes:
+
+| Status Code | Description |
+|-------------|-------------|
+| `200` | Success |
+| `400` | Bad request (invalid parameters) |
+| `404` | Resource not found |
+| `500` | Internal server error |
+| `503` | Service unavailable (node still warming up) |
+
+**Example Error**:
+```json
+{
+  "error": "Block not found"
+}
+```

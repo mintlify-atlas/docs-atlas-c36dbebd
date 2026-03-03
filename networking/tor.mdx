@@ -1,0 +1,425 @@
+---
+title: "Tor Support"
+description: "Configure Bitcoin Core to run as a Tor onion service for enhanced privacy and anonymity"
+---
+
+## Overview
+
+Bitcoin Core can run as a Tor onion service and connect to other onion services, providing enhanced privacy and resistance to network surveillance. Tor routes your traffic through multiple relays, making it difficult to trace your connection origin.
+
+<Note>
+Starting with Bitcoin Core 22.0, only Tor v3 addresses are supported. Tor v2 addresses are ignored and neither relayed nor stored.
+</Note>
+
+## Quick Start
+
+<Steps>
+
+<Step title="Install Tor">
+Install Tor on your system:
+
+```bash
+# Debian/Ubuntu
+sudo apt install tor
+
+# macOS
+brew install tor
+```
+</Step>
+
+<Step title="Start Tor Service">
+```bash
+sudo systemctl start tor
+sudo systemctl enable tor
+```
+</Step>
+
+<Step title="Run Bitcoin Core Behind Tor">
+```bash
+bitcoind -proxy=127.0.0.1:9050
+```
+</Step>
+
+</Steps>
+
+This configuration anonymizes all outbound Bitcoin connections through the Tor network.
+
+## Compatibility
+
+- **Bitcoin Core 22.0+**: Tor v3 only
+- **Tor 0.4.6+**: v2 support removed
+- **Recommended Tor version**: 0.4.6 or later
+
+<Warning>
+Tor v2 addresses are no longer supported. Ensure you're using Tor v3 addresses ending in `.onion` (56 characters).
+</Warning>
+
+## Configuration Methods
+
+There are three main ways to configure Tor with Bitcoin Core:
+
+### 1. Run Behind a Tor Proxy
+
+The simplest method - route all connections through Tor:
+
+```bash
+bitcoind -proxy=127.0.0.1:9050
+```
+
+**Configuration options:**
+
+```bash
+# Generic proxy (used for all networks including .onion)
+-proxy=ip[:port]
+
+# Tor-specific proxy
+-proxy=ip[:port]=tor
+# or
+-onion=ip[:port]
+
+# Explicitly disable onion access
+-onion=0
+# or
+-noonion
+```
+
+<Tip>
+The Tor Browser Bundle uses port 9150 by default, while system Tor installations typically use port 9050.
+</Tip>
+
+#### UNIX Domain Sockets
+
+You can use UNIX domain sockets for proxy connections:
+
+```bash
+bitcoind -onion=unix:/home/user/torsocket
+```
+
+### 2. Automatic Onion Service
+
+Bitcoin Core can automatically create ephemeral onion services using Tor's control socket API.
+
+<Steps>
+
+<Step title="Configure Tor Control Port">
+Edit `/etc/tor/torrc` and add/uncomment:
+
+```text
+ControlPort 9051
+CookieAuthentication 1
+CookieAuthFileGroupReadable 1
+DataDirectoryGroupReadable 1
+```
+</Step>
+
+<Step title="Restart Tor">
+```bash
+sudo systemctl restart tor
+```
+</Step>
+
+<Step title="Configure Permissions (if needed)">
+If you see authentication errors:
+
+```bash
+# Find Tor group
+getent group | cut -d: -f1 | grep -i tor
+
+# Add user to Tor group
+sudo usermod -a -G debian-tor $USER
+
+# Restart computer or log out/in
+```
+</Step>
+
+<Step title="Enable in Bitcoin Core">
+```bash
+bitcoind -proxy=127.0.0.1:9050 -listen -debug=tor
+```
+</Step>
+
+</Steps>
+
+**Configuration options:**
+
+```bash
+# Enable/disable onion service creation
+-listenonion=1  # default when -listen is set
+-listenonion=0  # disable
+
+# Tor control settings
+-torcontrol=127.0.0.1:9051
+-torpassword=yourpassword
+```
+
+#### Authentication Methods
+
+**Cookie Authentication** (recommended):
+
+Automatic if the user running `bitcoind` has read access to Tor's cookie file (`/run/tor/control.authcookie`).
+
+**Password Authentication**:
+
+```bash
+# Generate hashed password
+tor --hash-password mypassword
+
+# Add to /etc/tor/torrc
+HashedControlPassword 16:872860B76453A77C...
+
+# Use in Bitcoin Core
+bitcoind -torpassword=mypassword
+```
+
+### 3. Manual Onion Service
+
+Create a persistent onion service manually:
+
+<Steps>
+
+<Step title="Configure Tor">
+Add to `/etc/tor/torrc`:
+
+```text
+HiddenServiceDir /var/lib/tor/bitcoin-service/
+HiddenServicePort 8333 127.0.0.1:8334
+```
+
+<Note>
+Virtual port (8333) should match Bitcoin's P2P port. Target address (127.0.0.1:8334) is where Tor forwards connections.
+</Note>
+</Step>
+
+<Step title="Restart Tor">
+```bash
+sudo systemctl restart tor
+```
+</Step>
+
+<Step title="Get Your Onion Address">
+```bash
+sudo cat /var/lib/tor/bitcoin-service/hostname
+```
+
+Example output: `7zvj7a2imdgkdbg4f2dryd5rgtrn7upivr5eeij4cicjh65pooxeshid.onion`
+</Step>
+
+<Step title="Run Bitcoin Core">
+```bash
+bitcoind -proxy=127.0.0.1:9050 \
+  -externalip=7zvj7a2imdgkdbg4f2dryd5rgtrn7upivr5eeij4cicjh65pooxeshid.onion \
+  -listen
+```
+</Step>
+
+</Steps>
+
+## Advanced Configuration
+
+### Tor-Only Mode
+
+Connect exclusively to Tor peers:
+
+```bash
+bitcoind -onlynet=onion -proxy=127.0.0.1:9050
+```
+
+<Warning>
+Using `-onlynet=onion` may make your node more susceptible to Sybil attacks. Consider combining with other networks for better security.
+</Warning>
+
+### Dual-Stack Configuration
+
+Run reachable from both Tor and clearnet:
+
+```bash
+# Allow discovery of clearnet addresses
+bitcoind -proxy=127.0.0.1:9050 \
+  -externalip=your.onion.address \
+  -discover
+```
+
+<Note>
+Dual-stack nodes help strengthen the Bitcoin network but may allow traffic analysis to correlate your clearnet and Tor identities.
+</Note>
+
+### Tor for Onion Access Only
+
+Use Tor only for `.onion` addresses, clearnet for others:
+
+```bash
+bitcoind -onion=127.0.0.1:9050 \
+  -externalip=your.onion.address \
+  -discover
+```
+
+### Bind to Specific Interface
+
+Prevent clearnet connections to your onion-only node:
+
+```bash
+bitcoind -proxy=127.0.0.1:9050 \
+  -bind=127.0.0.1:8334=onion \
+  -externalip=your.onion.address \
+  -listen
+```
+
+### Multiple External IPs
+
+Advertise multiple addresses:
+
+```bash
+bitcoind -externalip=203.0.113.5 \
+  -externalip=your.onion.address
+```
+
+Bitcoin Core will advertise the most compatible address to each peer using heuristics.
+
+## Monitoring and Verification
+
+### Check Your Onion Address
+
+```bash
+# CLI netinfo
+bitcoin-cli -netinfo
+
+# RPC call
+bitcoin-cli getnetworkinfo | grep onion
+
+# Debug log
+grep "AddLocal" ~/.bitcoin/debug.log | grep ".onion"
+```
+
+### View Onion Peers
+
+```bash
+# Count of known onion addresses
+bitcoin-cli -addrinfo
+
+# Get specific onion peers
+bitcoin-cli getnodeaddresses 10 "onion"
+
+# Detailed peer info
+bitcoin-cli getpeerinfo | grep -A 10 "onion"
+```
+
+### Enable Tor Debug Logging
+
+```bash
+bitcoind -debug=tor
+```
+
+Check `~/.bitcoin/debug.log` for Tor-related messages:
+
+```bash
+tail -f ~/.bitcoin/debug.log | grep "tor:"
+```
+
+## Troubleshooting
+
+### Authentication Cookie Error
+
+```
+tor: Authentication cookie could not be opened (check permissions)
+```
+
+**Solution:**
+
+```bash
+# Find Tor group
+TORGROUP=$(stat -c '%G' /run/tor/control.authcookie)
+
+# Add user to group
+sudo usermod -a -G ${TORGROUP} ${USER}
+
+# Restart or log out/in
+```
+
+### Connection Issues
+
+```bash
+# Verify Tor is running
+systemctl status tor
+
+# Test Tor connectivity
+curl --socks5-hostname 127.0.0.1:9050 https://check.torproject.org
+
+# Check Bitcoin Core logs
+bitcoin-cli -netinfo
+```
+
+### Port Conflicts
+
+If using Tor Browser Bundle, it may use port 9150 instead of 9050:
+
+```bash
+bitcoind -proxy=127.0.0.1:9150
+```
+
+## Privacy Recommendations
+
+<Note>
+**Best Practices:**
+
+1. **Dedicated onion service**: Don't add other services to the same onion address
+2. **Single network**: Use `-onlynet=onion` for maximum privacy
+3. **No dual-stack**: Avoid running on multiple networks if unlinkability is required
+4. **Block-relay connections**: Consider using block-relay-only connections for additional privacy
+5. **Regular monitoring**: Check connections regularly with `-netinfo`
+</Note>
+
+<Warning>
+Operating bridge nodes (listening on both Tor and clearnet) can be correlated through timing analysis and shared runtime characteristics. Only use bridge mode if you don't require strict identity separation.
+</Warning>
+
+## Configuration Examples
+
+### Maximum Privacy
+
+```bash bitcoin.conf
+# Tor-only mode
+proxy=127.0.0.1:9050
+onlynet=onion
+listen=1
+listenonion=1
+debug=tor
+```
+
+### Bridge Node
+
+```bash bitcoin.conf
+# Accessible via both Tor and clearnet
+proxy=127.0.0.1:9050
+externalip=your.onion.address
+listen=1
+discover=1
+```
+
+### Automatic Ephemeral Service
+
+```bash bitcoin.conf
+proxy=127.0.0.1:9050
+listen=1
+listenonion=1
+torcontrol=127.0.0.1:9051
+debug=tor
+```
+
+## Performance Considerations
+
+Tor connections are generally slower than clearnet due to routing through multiple relays:
+
+- **Latency**: 3-10x higher than direct connections
+- **Bandwidth**: Limited by slowest relay in circuit
+- **Initial sync**: Significantly slower, consider using clearnet initially
+
+<Tip>
+For faster initial blockchain download, sync over clearnet first, then switch to Tor-only mode.
+</Tip>
+
+## See Also
+
+- [P2P Network](/networking/p2p-network) - General network configuration
+- [I2P Support](/networking/i2p) - Alternative privacy network
+- [CJDNS Support](/networking/cjdns) - Encrypted IPv6 network
+- [Tor Project Documentation](https://2019.www.torproject.org/docs/tor-manual.html.en)

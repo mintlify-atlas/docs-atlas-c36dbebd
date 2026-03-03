@@ -1,0 +1,387 @@
+---
+title: "Mining RPC Methods"
+description: "Mining, block generation, and network hashrate estimation using Bitcoin Core RPC methods"
+---
+
+# Mining RPC Methods
+
+Mining RPCs provide functionality for generating blocks, estimating network hashrate, and interacting with mining pool software.
+
+<Note>
+Most mining RPCs are primarily used for testing on regtest/testnet or by mining pool operators. Solo mining on mainnet is generally not profitable.
+</Note>
+
+## Network Hashrate
+
+### getnetworkhashps
+
+Returns the estimated network hashes per second based on recent blocks.
+
+<ParamField name="nblocks" type="number" default="120">
+  Number of blocks to calculate estimate from (-1 for blocks since last difficulty change)
+</ParamField>
+
+<ParamField name="height" type="number" default="-1">
+  Block height to estimate at (-1 for current tip)
+</ParamField>
+
+```bash
+# Get network hashrate over last 120 blocks
+bitcoin-cli getnetworkhashps
+
+# Get hashrate over last 2016 blocks (difficulty period)
+bitcoin-cli getnetworkhashps 2016
+
+# Get hashrate at specific height
+bitcoin-cli getnetworkhashps 120 700000
+```
+
+<ResponseField name="result" type="number">
+  Estimated network hashes per second
+</ResponseField>
+
+### getmininginfo
+
+Returns mining-related information.
+
+```bash
+bitcoin-cli getmininginfo
+```
+
+<ResponseField name="blocks" type="number">
+  Current block height
+</ResponseField>
+
+<ResponseField name="currentblockweight" type="number">
+  Weight of the last block
+</ResponseField>
+
+<ResponseField name="currentblocktx" type="number">
+  Number of transactions in last block
+</ResponseField>
+
+<ResponseField name="difficulty" type="number">
+  Current difficulty
+</ResponseField>
+
+<ResponseField name="networkhashps" type="number">
+  Estimated network hashes per second
+</ResponseField>
+
+<ResponseField name="pooledtx" type="number">
+  Number of transactions in mempool
+</ResponseField>
+
+<ResponseField name="chain" type="string">
+  Network name (main, test, signet, regtest)
+</ResponseField>
+
+<ResponseField name="warnings" type="string">
+  Any network warnings
+</ResponseField>
+
+## Block Generation (Regtest/Testnet)
+
+### generatetoaddress
+
+Mines blocks to a specified address. **Only works on regtest.**
+
+<ParamField name="nblocks" type="number" required>
+  Number of blocks to generate
+</ParamField>
+
+<ParamField name="address" type="string" required>
+  Address to send newly generated bitcoin to
+</ParamField>
+
+<ParamField name="maxtries" type="number" default="1000000">
+  Maximum iterations to try
+</ParamField>
+
+```bash
+# Generate 10 blocks to address
+bitcoin-cli -regtest generatetoaddress 10 "bcrt1q..."
+```
+
+<ResponseField name="result" type="array">
+  Array of block hashes generated
+</ResponseField>
+
+<Warning>
+This RPC only works on regtest network. For mainnet/testnet, use external mining software.
+</Warning>
+
+### generatetodescriptor
+
+Mines blocks to a specified descriptor. **Only works on regtest.**
+
+<ParamField name="num_blocks" type="number" required>
+  Number of blocks to generate
+</ParamField>
+
+<ParamField name="descriptor" type="string" required>
+  Output descriptor to send newly generated bitcoin to
+</ParamField>
+
+<ParamField name="maxtries" type="number" default="1000000">
+  Maximum iterations to try
+</ParamField>
+
+```bash
+# Generate 11 blocks to descriptor
+bitcoin-cli -regtest generatetodescriptor 11 "wpkh([d34db33f/84h/0h/0h]xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL/0/*)#3wqxq7ju"
+```
+
+<ResponseField name="result" type="array">
+  Array of block hashes generated
+</ResponseField>
+
+### generate
+
+**Deprecated.** Replaced by the `-generate` CLI option.
+
+```bash
+# Use this instead:
+bitcoind -regtest -generate
+```
+
+## Mining Pool Operations
+
+### getblocktemplate
+
+Returns data needed to construct a block to mine.
+
+<ParamField name="template_request" type="object">
+  Template request object with optional fields:
+  - `mode`: "template" (default) or "proposal"
+  - `capabilities`: Array of supported features
+  - `rules`: Array of supported softfork deployments
+</ParamField>
+
+```bash
+# Get block template
+bitcoin-cli getblocktemplate '{"rules": ["segwit"]}'
+```
+
+<ResponseField name="version" type="number">
+  Block version
+</ResponseField>
+
+<ResponseField name="previousblockhash" type="string">
+  Hash of previous block
+</ResponseField>
+
+<ResponseField name="transactions" type="array">
+  Array of transaction objects with:
+  - `data`: Serialized transaction (hex)
+  - `txid`: Transaction ID
+  - `hash`: Transaction witness hash
+  - `depends`: Transaction dependencies (1-based indices)
+  - `fee`: Transaction fee in satoshis
+  - `sigops`: Legacy signature operations count
+  - `weight`: Transaction weight
+</ResponseField>
+
+<ResponseField name="coinbaseaux" type="object">
+  Data for coinbase transaction
+</ResponseField>
+
+<ResponseField name="coinbasevalue" type="number">
+  Maximum value for coinbase (subsidy + fees)
+</ResponseField>
+
+<ResponseField name="target" type="string">
+  Hash target (hex)
+</ResponseField>
+
+<ResponseField name="mintime" type="number">
+  Minimum timestamp for block
+</ResponseField>
+
+<ResponseField name="curtime" type="number">
+  Current timestamp
+</ResponseField>
+
+<ResponseField name="bits" type="string">
+  Compressed difficulty target
+</ResponseField>
+
+<ResponseField name="height" type="number">
+  Height of next block
+</ResponseField>
+
+<ResponseField name="default_witness_commitment" type="string">
+  Witness commitment for coinbase (if SegWit enabled)
+</ResponseField>
+
+<Note>
+This RPC requires the node to be configured for mining (e.g., with `-miner` configuration) and have at least one peer connection.
+</Note>
+
+### submitblock
+
+Submits a new block to the network.
+
+<ParamField name="hexdata" type="string" required>
+  Serialized block data (hex)
+</ParamField>
+
+<ParamField name="dummy" type="string">
+  Dummy parameter for compatibility (ignored)
+</ParamField>
+
+```bash
+bitcoin-cli submitblock "0400000000000000000000..."
+```
+
+<ResponseField name="result" type="string | null">
+  - `null`: Block was accepted
+  - Error string: Block was rejected with reason
+</ResponseField>
+
+Possible rejection reasons:
+- `duplicate`: Block already exists
+- `duplicate-invalid`: Block previously marked invalid
+- `inconclusive`: Node not sure if block is valid
+- `rejected`: Block violated consensus rules
+- `high-hash`: Block doesn't meet proof-of-work requirement
+
+### submitheader
+
+Submits a block header (without transactions) to check validity.
+
+<ParamField name="hexdata" type="string" required>
+  Serialized block header (hex)
+</ParamField>
+
+```bash
+bitcoin-cli submitheader "00000020890fbf6..."
+```
+
+<Note>
+Useful for testing block header validity without constructing full block.
+</Note>
+
+## Priority and Fee Estimation
+
+### prioritisetransaction
+
+Modifies transaction priority for block inclusion.
+
+<ParamField name="txid" type="string" required>
+  Transaction ID
+</ParamField>
+
+<ParamField name="dummy" type="number">
+  Deprecated parameter (use 0)
+</ParamField>
+
+<ParamField name="fee_delta" type="number" required>
+  Fee value (in satoshis) to add/subtract
+</ParamField>
+
+```bash
+# Increase transaction priority by 10,000 satoshis
+bitcoin-cli prioritisetransaction "txid" 0 10000
+
+# Decrease priority
+bitcoin-cli prioritisetransaction "txid" 0 -10000
+```
+
+<ResponseField name="result" type="boolean">
+  Returns true if successful
+</ResponseField>
+
+<Note>
+This affects the transaction's priority in this node's mempool and block template generation. It does not affect other nodes.
+</Note>
+
+## Block Assembly
+
+### getblockhash
+
+Returns the hash of a block at given height.
+
+<ParamField name="height" type="number" required>
+  Block height
+</ParamField>
+
+```bash
+bitcoin-cli getblockhash 0
+```
+
+<ResponseField name="result" type="string">
+  Block hash at specified height
+</ResponseField>
+
+## Mining Configuration
+
+For mining operations, configure your `bitcoin.conf`:
+
+```conf
+# Enable mining
+server=1
+
+# Set minimum relay fee (optional)
+minrelaytxfee=0.00001
+
+# For regtest mining
+regtest=1
+[regtest]
+rpcuser=your_username
+rpcpassword=your_password
+```
+
+## Mining Pool Integration
+
+Typical mining pool workflow:
+
+1. **Get block template**
+   ```bash
+   bitcoin-cli getblocktemplate '{"rules": ["segwit"]}'
+   ```
+
+2. **Construct coinbase transaction** with pool's address and witness commitment
+
+3. **Build merkle root** from transactions
+
+4. **Create block header** with nonce field
+
+5. **Mine block** by incrementing nonce until valid proof-of-work found
+
+6. **Submit block**
+   ```bash
+   bitcoin-cli submitblock "block_hex_data"
+   ```
+
+## Testing Block Generation
+
+For testing on regtest:
+
+```bash
+# Start regtest node
+bitcoind -regtest -daemon
+
+# Create a wallet
+bitcoin-cli -regtest createwallet "test"
+
+# Generate address
+ADDR=$(bitcoin-cli -regtest getnewaddress)
+
+# Mine 101 blocks (100 + 1 to make first coinbase spendable)
+bitcoin-cli -regtest generatetoaddress 101 "$ADDR"
+
+# Check balance
+bitcoin-cli -regtest getbalance
+```
+
+## Difficulty Information
+
+Understanding difficulty values:
+
+- **Difficulty**: Multiple of minimum difficulty (1.0 = minimum)
+- **Target**: Maximum hash value for valid block (lower = harder)
+- **Bits**: Compact representation of target
+- **Chainwork**: Cumulative proof-of-work in chain (hex)
+
+Difficulty adjusts every 2016 blocks (~2 weeks) to maintain 10-minute block time.
